@@ -1,0 +1,5 @@
+Stage,Kcb,Start_Day,End_Day,Root_Depth_mm
+Initial,0.3,1,30,300
+Development,0.7,31,75,600
+Mid,1.05,76,150,1000
+Late,0.85,151,180,1000
