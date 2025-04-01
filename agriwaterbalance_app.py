@@ -18,45 +18,44 @@ with col2:
     st.markdown("**A research-grade, multi-layer soil water balance tool for any crop and soil.**")
 
 # -------------------
-# Sidebar: File Uploads, Options, and Run Button
+# Sidebar: All Widgets in One Container
 # -------------------
-st.sidebar.header("Upload Input Files (.txt)")
-weather_file = st.sidebar.file_uploader("Weather Data (.txt)", type="txt")
-crop_file = st.sidebar.file_uploader("Crop Stage Data (.txt)", type="txt")
-soil_file = st.sidebar.file_uploader("Soil Layers (.txt)", type="txt")
-
-st.sidebar.header("Options")
-show_monthly_summary = st.sidebar.checkbox("Show Monthly Summary", value=True)
-track_drainage = st.sidebar.checkbox("Track Drainage", value=True)
-
-# Yield Estimation Section
-st.sidebar.header("Yield Estimation")
-enable_yield = st.sidebar.checkbox("Enable Yield Estimation", value=False)
-if enable_yield:
-    st.sidebar.subheader("Select Methods")
-    use_fao33 = st.sidebar.checkbox("Use FAO-33 Ky-based method", value=True)
-    use_transp = st.sidebar.checkbox("Use Transpiration-based method", value=False)
-    if use_fao33:
-        Ym = st.sidebar.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1)
-        Ky = st.sidebar.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
-    if use_transp:
-        WP_yield = st.sidebar.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
-
-# Leaching Estimation Section
-st.sidebar.header("Leaching Estimation")
-enable_leaching = st.sidebar.checkbox("Enable Leaching Estimation", value=False)
-if enable_leaching:
-    leaching_method = st.sidebar.radio("Select Leaching Method", [
-        "Method 1: Drainage × nitrate concentration",
-        "Method 2: Leaching Fraction × total N input"
-    ])
-    if leaching_method == "Method 1: Drainage × nitrate concentration":
-        nitrate_conc = st.sidebar.number_input("Nitrate Concentration (mg/L)", min_value=0.0, value=10.0, step=0.1)
-    elif leaching_method == "Method 2: Leaching Fraction × total N input":
-        total_N_input = st.sidebar.number_input("Total N Input (kg/ha)", min_value=0.0, value=100.0, step=1.0)
-        leaching_fraction = st.sidebar.number_input("Leaching Fraction (0-1)", min_value=0.0, max_value=1.0, value=0.1, step=0.01)
-
-run_button = st.sidebar.button("🚀 Run Simulation")
+with st.sidebar:
+    st.header("Upload Input Files (.txt)")
+    weather_file = st.file_uploader("Weather Data (.txt)", type="txt")
+    crop_file = st.file_uploader("Crop Stage Data (.txt)", type="txt")
+    soil_file = st.file_uploader("Soil Layers (.txt)", type="txt")
+    
+    st.header("Options")
+    show_monthly_summary = st.checkbox("Show Monthly Summary", value=True)
+    track_drainage = st.checkbox("Track Drainage", value=True)
+    
+    st.header("Yield Estimation")
+    enable_yield = st.checkbox("Enable Yield Estimation", value=False)
+    if enable_yield:
+        st.subheader("Select Methods")
+        use_fao33 = st.checkbox("Use FAO-33 Ky-based method", value=True)
+        use_transp = st.checkbox("Use Transpiration-based method", value=False)
+        if use_fao33:
+            Ym = st.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1)
+            Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
+        if use_transp:
+            WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
+    
+    st.header("Leaching Estimation")
+    enable_leaching = st.checkbox("Enable Leaching Estimation", value=False)
+    if enable_leaching:
+        leaching_method = st.radio("Select Leaching Method", [
+            "Method 1: Drainage × nitrate concentration",
+            "Method 2: Leaching Fraction × total N input"
+        ])
+        if leaching_method == "Method 1: Drainage × nitrate concentration":
+            nitrate_conc = st.number_input("Nitrate Concentration (mg/L)", min_value=0.0, value=10.0, step=0.1)
+        elif leaching_method == "Method 2: Leaching Fraction × total N input":
+            total_N_input = st.number_input("Total N Input (kg/ha)", min_value=0.0, value=100.0, step=1.0)
+            leaching_fraction = st.number_input("Leaching Fraction (0-1)", min_value=0.0, max_value=1.0, value=0.1, step=0.01)
+    
+    run_button = st.button("🚀 Run Simulation")
 
 # -------------------
 # Helper Functions
@@ -235,12 +234,16 @@ if run_button and weather_file and crop_file and soil_file:
             elif leaching_method == "Method 2: Leaching Fraction × total N input":
                 total_leaching_kg_ha = leaching_fraction * total_N_input
 
-        # Tabs for displaying results
+        # -------------------
+        # Tabs for Displaying Results
+        # -------------------
         tab1, tab2, tab3, tab4 = st.tabs(["📄 Daily Results", "📈 ET Graphs", "💧 Storage", "🌾 Yield and Leaching"])
 
         with tab1:
             st.dataframe(results_df)
-            st.download_button("📥 Download Results (.txt)", results_df.to_csv(index=False), file_name="agriwaterbalance_results.txt")
+            st.download_button("📥 Download Results (.txt)",
+                               results_df.to_csv(index=False),
+                               file_name="agriwaterbalance_results.txt")
 
         with tab2:
             fig, ax = plt.subplots()
@@ -277,8 +280,10 @@ if run_button and weather_file and crop_file and soil_file:
             monthly = results_df.copy()
             monthly['Month'] = monthly['Date'].dt.to_period('M')
             summary = monthly.groupby('Month').agg({
-                'ET0 (mm)': 'mean', 'ETc (mm)': 'mean',
-                'ETa_transp (mm)': 'mean', 'ETa_evap (mm)': 'mean',
+                'ET0 (mm)': 'mean',
+                'ETc (mm)': 'mean',
+                'ETa_transp (mm)': 'mean',
+                'ETa_evap (mm)': 'mean',
                 'Cumulative_Irrigation (mm)': 'max',
                 'Cumulative_Precip (mm)': 'max',
                 'Stress_Days': 'max'
