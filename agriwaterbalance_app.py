@@ -8,6 +8,9 @@
 # - Cumulative ET, Irrigation, Precipitation, Drainage
 # - Optional toggles for drainage tracking and monthly summary
 # - Scientifically formatted outputs and plots
+# - Crop Yield Estimation (FAO-33 Ky-based and Transpiration-based)
+# - Leaching Estimation (Drainage × nitrate concentration and Leaching Fraction × total N input)
+# - Daily soil water content (SWC) calculation
 
 import streamlit as st
 import pandas as pd
@@ -39,6 +42,33 @@ soil_file = st.sidebar.file_uploader("Soil Layers (.txt)", type="txt")
 st.sidebar.header("Options")
 show_monthly_summary = st.sidebar.checkbox("Show Monthly Summary", value=True)
 track_drainage = st.sidebar.checkbox("Track Drainage", value=True)
+
+# Yield Estimation
+st.sidebar.header("Yield Estimation")
+enable_yield = st.sidebar.checkbox("Enable Yield Estimation", value=False)
+if enable_yield:
+    st.sidebar.subheader("Select Methods")
+    use_fao33 = st.sidebar.checkbox("Use FAO-33 Ky-based method", value=True)
+    use_transp = st.sidebar.checkbox("Use Transpiration-based method", value=False)
+    if use_fao33:
+        Ym = st.sidebar.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1)
+        Ky = st.sidebar.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
+    if use_transp:
+        WP_yield = st.sidebar.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
+
+# Leaching Estimation
+st.sidebar.header("Leaching Estimation")
+enable_leaching = st.sidebar.checkbox("Enable Leaching Estimation", value=False)
+if enable_leaching:
+    leaching_method = st.sidebar.radio("Select Leaching Method", [
+        "Method 1: Drainage × nitrate concentration",
+        "Method 2: Leaching Fraction × total N input"
+    ])
+    if leaching_method == "Method 1: Drainage × nitrate concentration":
+        nitrate_conc = st.sidebar.number_input("Nitrate Concentration (mg/L)", min_value=0.0, value=10.0, step=0.1)
+    elif leaching_method == "Method 2: Leaching Fraction × total N input":
+        total_N_input = st.sidebar.number_input("Total N Input (kg/ha)", min_value=0.0, value=100.0, step=1.0)
+        leaching_fraction = st.sidebar.number_input("Leaching Fraction (0-1)", min_value=0.0, max_value=1.0, value=0.1, step=0.01)
 
 run_button = st.sidebar.button("🚀 Run Simulation")
 
@@ -114,11 +144,12 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain):
         FC_total, WP_total, SW_root = 0.0, 0.0, 0.0
         cum_depth = 0.0
         for j, soil in soil_df.iterrows():
-            if cum_depth >= RD: break
+            if cum_depth >= RD:
+                break
             d = min(soil['Depth_mm'], RD - cum_depth)
             FC_total += soil['FC'] * d
             WP_total += soil['WP'] * d
-            SW_root += SW_layers[j]
+            SW_root += (SW_layers[j] / soil['Depth_mm']) * d  # Corrected
             cum_depth += d
 
         TAW = FC_total - WP_total
@@ -131,7 +162,8 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain):
         ETa_evap = Kr * Ke * ET0
         cum_ETc += ETc
         cum_ETa += (ETa_transp + ETa_evap)
-        if Ks < 1.0: stress_days += 1
+        if Ks < 1.0:
+            stress_days += 1
 
         SW_surface += P + I
         excess_surface = max(0, SW_surface - TEW)
@@ -142,22 +174,36 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain):
             max_SW = soil['FC'] * soil['Depth_mm']
             SW_layers[j] += water
             drain = max(0, SW_layers[j] - max_SW)
-            if track_drain: cum_drain += drain
+            if track_drain:
+                cum_drain += drain
             SW_layers[j] = min(SW_layers[j], max_SW)
             water = drain
 
-            transp = ETa_transp * (soil['Depth_mm'] / RD)
-            SW_layers[j] -= transp
-            SW_layers[j] = max(soil['WP'] * soil['Depth_mm'], SW_layers[j])
+            # Transpiration extraction
+            if cum_depth < RD:
+                transp = ETa_transp * (soil['Depth_mm'] / RD)
+                SW_layers[j] -= transp
+                SW_layers[j] = max(soil['WP'] * soil['Depth_mm'], SW_layers[j])
 
         results.append({
-            "Date": row['Date'], "ET0 (mm)": ET0, "Kcb": Kcb, "Ks": Ks, "Kr": Kr,
-            "ETc (mm)": ETc, "ETa_transp (mm)": ETa_transp, "ETa_evap (mm)": ETa_evap,
-            "SW_surface (mm)": SW_surface, "SW_root (mm)": sum(SW_layers),
-            "Depletion (mm)": depletion, "TAW (mm)": TAW,
+            "Date": row['Date'],
+            "ET0 (mm)": ET0,
+            "Kcb": Kcb,
+            "Ks": Ks,
+            "Kr": Kr,
+            "ETc (mm)": ETc,
+            "ETa_transp (mm)": ETa_transp,
+            "ETa_evap (mm)": ETa_evap,
+            "SW_surface (mm)": SW_surface,
+            "SW_root (mm)": SW_root,  # Corrected
+            "Root_Depth (mm)": RD,    # Added for SWC
+            "Depletion (mm)": depletion,
+            "TAW (mm)": TAW,
             "Storage_Deficit (mm)": storage_deficit,
-            "Cumulative_ETc (mm)": cum_ETc, "Cumulative_ETa (mm)": cum_ETa,
-            "Cumulative_Irrigation (mm)": cum_Irr, "Cumulative_Precip (mm)": cum_P,
+            "Cumulative_ETc (mm)": cum_ETc,
+            "Cumulative_ETa (mm)": cum_ETa,
+            "Cumulative_Irrigation (mm)": cum_Irr,
+            "Cumulative_Precip (mm)": cum_P,
             "Cumulative_Drainage (mm)": cum_drain if track_drain else None,
             "Stress_Days": stress_days
         })
@@ -173,9 +219,38 @@ if run_button and weather_file and crop_file and soil_file:
         crop_df = pd.read_csv(crop_file)
         soil_df = pd.read_csv(soil_file)
 
+        # Ensure track_drainage is True if leaching method 1 is selected
+        if enable_leaching and leaching_method == "Method 1: Drainage × nitrate concentration":
+            track_drainage = True
+            st.sidebar.info("ℹ️ Drainage tracking enabled for leaching estimation.")
+
         results_df = SIMdualKc(weather_df, crop_df, soil_df, track_drainage)
 
-        tab1, tab2, tab3 = st.tabs(["📄 Daily Results", "📈 ET Graphs", "💧 Storage"])
+        # Add SWC calculation
+        results_df['SWC (%)'] = (results_df['SW_root (mm)'] / results_df['Root_Depth (mm)']) * 100
+
+        # Calculate yield if enabled
+        if enable_yield:
+            total_ETa = results_df['Cumulative_ETa (mm)'].iloc[-1]
+            total_ETc = results_df['Cumulative_ETc (mm)'].iloc[-1]
+            total_T_act = results_df['ETa_transp (mm)'].sum()
+            if use_fao33:
+                Ya_fao33 = Ym * (1 - Ky * (1 - total_ETa / total_ETc)) if total_ETc > 0 else 0
+            if use_transp:
+                Ya_transp = WP_yield * total_T_act
+
+        # Calculate leaching if enabled
+        if enable_leaching:
+            if leaching_method == "Method 1: Drainage × nitrate concentration":
+                daily_drainage = results_df['Cumulative_Drainage (mm)'].diff().fillna(0)
+                daily_leaching = daily_drainage * nitrate_conc  # mg/m²
+                total_leaching_mg_m2 = daily_leaching.sum()
+                total_leaching_kg_ha = total_leaching_mg_m2 * 0.01  # Convert mg/m² to kg/ha
+            elif leaching_method == "Method 2: Leaching Fraction × total N input":
+                total_leaching_kg_ha = leaching_fraction * total_N_input
+
+        # Tabs
+        tab1, tab2, tab3, tab4 = st.tabs(["📄 Daily Results", "📈 ET Graphs", "💧 Storage", "🌾 Yield and Leaching"])
 
         with tab1:
             st.dataframe(results_df)
@@ -186,18 +261,31 @@ if run_button and weather_file and crop_file and soil_file:
             ax.plot(results_df['Date'], results_df['ETa_transp (mm)'], label='Transpiration')
             ax.plot(results_df['Date'], results_df['ETa_evap (mm)'], label='Evaporation')
             ax.plot(results_df['Date'], results_df['ETc (mm)'], label='ETc')
-            ax.set_ylabel("ET (mm)"); ax.legend(); ax.grid(True)
+            ax.set_ylabel("ET (mm)")
+            ax.legend()
+            ax.grid(True)
             st.pyplot(fig)
 
         with tab3:
             fig2, ax2 = plt.subplots()
             ax2.plot(results_df['Date'], results_df['SW_root (mm)'], label='Root Zone SW', color='green')
-            ax2.set_ylabel("Soil Water (mm)"); ax2.legend(); ax2.grid(True)
+            ax2.set_ylabel("Soil Water (mm)")
+            ax2.legend()
+            ax2.grid(True)
             st.pyplot(fig2)
 
-        # -------------------
+        with tab4:
+            if enable_yield:
+                st.subheader("Crop Yield Estimation")
+                if use_fao33:
+                    st.write(f"FAO-33 Ky-based Yield: {Ya_fao33:.2f} ton/ha")
+                if use_transp:
+                    st.write(f"Transpiration-based Yield: {Ya_transp:.2f} ton/ha")
+            if enable_leaching:
+                st.subheader("Leaching Estimation")
+                st.write(f"Total Leaching: {total_leaching_kg_ha:.2f} kg/ha")
+
         # Monthly Summary Tab (Optional)
-        # -------------------
         if show_monthly_summary:
             st.subheader("📆 Monthly Summary")
             monthly = results_df.copy()
