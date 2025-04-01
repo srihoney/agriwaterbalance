@@ -10,6 +10,7 @@ shapely>=2.0.0
 rasterio
 folium
 pyproj
+streamlit-folium>=0.14.0
 
 # Remote sensing / external data APIs (optional but useful)
 earthengine-api
