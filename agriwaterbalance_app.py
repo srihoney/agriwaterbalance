@@ -25,7 +25,7 @@ with col2:
     st.markdown("**A research-grade, multi-layer soil water balance tool for any crop and soil.**")
 
 # -------------------
-# Core Simulation Functions (used in both modes)
+# Core Simulation Functions (common to both modes)
 # -------------------
 def compute_Ks(depletion, TAW, p):
     RAW = p * TAW
@@ -165,7 +165,7 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain):
 mode = st.radio("Choose Mode:", ["Normal Mode", "Spatial Mode"], horizontal=True)
 
 # =========================================
-# NORMAL MODE (upload your own data)
+# NORMAL MODE (User uploads their own data)
 # =========================================
 if mode == "Normal Mode":
     with st.sidebar:
@@ -211,7 +211,6 @@ if mode == "Normal Mode":
             crop_df = pd.read_csv(crop_file)
             soil_df = pd.read_csv(soil_file)
 
-            # (Optional) Enable drainage tracking for leaching estimation
             if enable_leaching and leaching_method == "Method 1: Drainage × nitrate concentration":
                 track_drainage = True
                 st.sidebar.info("ℹ️ Drainage tracking enabled for leaching estimation.")
@@ -219,7 +218,6 @@ if mode == "Normal Mode":
             results_df = SIMdualKc(weather_df, crop_df, soil_df, track_drainage)
             results_df['SWC (%)'] = (results_df['SW_root (mm)'] / results_df['Root_Depth (mm)']) * 100
 
-            # Yield and Leaching Calculations
             if enable_yield:
                 total_ETa = results_df['Cumulative_ETa (mm)'].iloc[-1]
                 total_ETc = results_df['Cumulative_ETc (mm)'].iloc[-1]
@@ -231,18 +229,17 @@ if mode == "Normal Mode":
             if enable_leaching:
                 if leaching_method == "Method 1: Drainage × nitrate concentration":
                     daily_drainage = results_df['Cumulative_Drainage (mm)'].diff().fillna(0)
-                    daily_leaching = daily_drainage * nitrate_conc  # mg/m²
+                    daily_leaching = daily_drainage * nitrate_conc
                     total_leaching_mg_m2 = daily_leaching.sum()
-                    total_leaching_kg_ha = total_leaching_mg_m2 * 0.01  # Convert mg/m² to kg/ha
+                    total_leaching_kg_ha = total_leaching_mg_m2 * 0.01
                 elif leaching_method == "Method 2: Leaching Fraction × total N input":
                     total_leaching_kg_ha = leaching_fraction * total_N_input
 
             tab1, tab2, tab3, tab4 = st.tabs(["📄 Daily Results", "📈 ET Graphs", "💧 Storage", "🌾 Yield and Leaching"])
             with tab1:
                 st.dataframe(results_df)
-                st.download_button("📥 Download Results (.txt)",
-                                   results_df.to_csv(index=False),
-                                   file_name="agriwaterbalance_results.txt")
+                csv = results_df.to_csv(index=False)
+                st.download_button("📥 Download Results (.txt)", csv, file_name="agriwaterbalance_results.txt")
             with tab2:
                 fig, ax = plt.subplots()
                 ax.plot(results_df['Date'], results_df['ETa_transp (mm)'], label='Transpiration')
@@ -289,26 +286,22 @@ if mode == "Normal Mode":
         st.info("📂 Please upload all required files and click 'Run Simulation' to begin.")
 
 # =========================================
-# SPATIAL MODE (use drawn study area to fetch online data and run simulation)
+# SPATIAL MODE (Use drawn polygon to fetch online data and run simulation)
 # =========================================
 elif mode == "Spatial Mode":
     st.markdown("### 🌍 Spatial Mode Activated")
-    st.info("Use the interactive map below to draw your study area. The drawn polygon will be used to simulate the water balance using 'online-fetched' (dummy) data.")
+    st.info("Use the interactive map below to draw your study area. The drawn polygon will be used to fetch online data and run the spatial water balance simulation.")
 
-    # Step 1: Define Study Area Using an Interactive Map
-    st.subheader("Step 1: Draw Your Study Area")
-    lat = st.number_input("Center Latitude", value=36.7783)
-    lon = st.number_input("Center Longitude", value=-119.4179)
-    buffer_km = st.slider("Buffer (km)", 1, 20, 5)
-
-    # Create a Folium map with satellite imagery (ESRI World Imagery)
-    m = folium.Map(location=[lat, lon], zoom_start=12, tiles="Esri.WorldImagery")
+    # Step 1: Show an interactive map with drawing tool (no lat/lon input required)
+    # Initialize the map at a default center (e.g., central California)
+    default_center = [36.7783, -119.4179]
+    m = folium.Map(location=default_center, zoom_start=7, tiles="Esri.WorldImagery")
     draw = Draw(export=True)
     draw.add_to(m)
-    st.info("Use the drawing tool to outline your study area (polygon).")
+    st.info("Draw your study area polygon using the drawing tool on the map.")
     map_data = st_folium(m, key="map", width=700, height=500)
 
-    # If a polygon is drawn, extract its geometry
+    # Step 2: Extract the drawn polygon(s) (if any)
     study_area = None
     if map_data and map_data.get("all_drawings"):
         drawings = map_data["all_drawings"]
@@ -320,29 +313,29 @@ elif mode == "Spatial Mode":
                     shapes.append(shape(geom))
             if shapes:
                 study_area = gpd.GeoDataFrame(geometry=shapes, crs="EPSG:4326")
+                # To display the study area on a map, extract centroids as lat/lon columns
+                study_area["lat"] = study_area.centroid.y
+                study_area["lon"] = study_area.centroid.x
                 st.write("### Your Drawn Study Area")
-                st.map(study_area)
+                st.map(study_area[["lat", "lon"]])
 
-    # Only allow simulation if a study area was drawn
+    # Proceed with simulation only if a study area polygon was drawn
     if study_area is not None:
-        st.subheader("Step 2: Run Spatial Simulation")
+        st.subheader("Run Spatial Simulation")
         if st.button("Run Spatial Simulation"):
             try:
                 # -----------------------------------------------------
                 # Dummy online data generation based on study area
-                # (In your real app, use study_area geometry to query online APIs)
-                # -----------------------------------------------------
+                # (Replace this section with your online API/data queries using study_area geometry)
                 num_days = 30
                 start_date = datetime.date.today()
                 dates = [start_date + datetime.timedelta(days=i) for i in range(num_days)]
-                # Create dummy weather data (ET0, Precipitation, Irrigation)
                 weather_df = pd.DataFrame({
                     "Date": dates,
-                    "ET0": np.full(num_days, 5.0),           # constant ET0 of 5 mm/day
-                    "Precipitation": np.full(num_days, 2.0),   # constant precipitation of 2 mm/day
-                    "Irrigation": np.zeros(num_days)           # no irrigation applied
+                    "ET0": np.full(num_days, 5.0),
+                    "Precipitation": np.full(num_days, 2.0),
+                    "Irrigation": np.zeros(num_days)
                 })
-                # Create dummy crop data (single stage covering entire period)
                 crop_df = pd.DataFrame({
                     "Start_Day": [1],
                     "End_Day": [num_days],
@@ -351,20 +344,17 @@ elif mode == "Spatial Mode":
                     "p": [0.5],
                     "Ke": [1.0]
                 })
-                # Create dummy soil data (2 layers; first row provides TEW and REW)
                 soil_df = pd.DataFrame({
                     "Depth_mm": [200, 300],
                     "FC": [0.3, 0.25],
                     "WP": [0.15, 0.1],
-                    "TEW": [200, 0],   # TEW and REW are taken from the first layer
+                    "TEW": [200, 0],
                     "REW": [50, 0]
                 })
 
-                # Run the simulation (using drainage tracking = True)
                 results_df = SIMdualKc(weather_df, crop_df, soil_df, track_drain=True)
                 results_df['SWC (%)'] = (results_df['SW_root (mm)'] / results_df['Root_Depth (mm)']) * 100
 
-                # Display the simulation results in tabs
                 tab1, tab2, tab3, tab4 = st.tabs(["📄 Daily Results", "📈 ET Graphs", "💧 Storage", "🌾 Yield and Leaching"])
                 with tab1:
                     st.dataframe(results_df)
@@ -391,4 +381,4 @@ elif mode == "Spatial Mode":
             except Exception as e:
                 st.error(f"⚠️ Spatial simulation failed: {e}")
     else:
-        st.info("Please draw a study area on the map above to run the spatial simulation.")
+        st.info("Please draw your study area polygon on the map above to run the spatial simulation.")
