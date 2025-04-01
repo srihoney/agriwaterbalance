@@ -29,9 +29,9 @@ st.sidebar.header("Options")
 show_monthly_summary = st.sidebar.checkbox("Show Monthly Summary", value=True)
 track_drainage = st.sidebar.checkbox("Track Drainage", value=True)
 
-# Yield Estimation (single declaration)
+# Yield Estimation Section
 st.sidebar.header("Yield Estimation")
-enable_yield = st.sidebar.checkbox("Enable Yield Estimation", value=True)
+enable_yield = st.sidebar.checkbox("Enable Yield Estimation", value=False)
 if enable_yield:
     st.sidebar.subheader("Select Methods")
     use_fao33 = st.sidebar.checkbox("Use FAO-33 Ky-based method", value=True)
@@ -42,7 +42,7 @@ if enable_yield:
     if use_transp:
         WP_yield = st.sidebar.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
 
-# Leaching Estimation (single declaration)
+# Leaching Estimation Section
 st.sidebar.header("Leaching Estimation")
 enable_leaching = st.sidebar.checkbox("Enable Leaching Estimation", value=False)
 if enable_leaching:
@@ -205,7 +205,7 @@ if run_button and weather_file and crop_file and soil_file:
         crop_df = pd.read_csv(crop_file)
         soil_df = pd.read_csv(soil_file)
 
-        # Ensure drainage tracking is enabled if leaching method 1 is selected
+        # Enable drainage tracking if leaching method 1 is selected
         if enable_leaching and leaching_method == "Method 1: Drainage × nitrate concentration":
             track_drainage = True
             st.sidebar.info("ℹ️ Drainage tracking enabled for leaching estimation.")
