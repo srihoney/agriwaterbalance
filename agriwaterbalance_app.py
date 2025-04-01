@@ -1,13 +1,21 @@
+pip install streamlit-folium geopandas folium requests
+```)
+
+Below is the complete code:
+
+---
+
+```python
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
+import numpy as np
 import geopandas as gpd
-from shapely.geometry import shape
+import matplotlib.pyplot as plt
 import folium
 from folium.plugins import Draw
 from streamlit_folium import st_folium
+from shapely.geometry import shape, Point
 import datetime
-import numpy as np
 import requests
 
 # -------------------
@@ -70,7 +78,7 @@ def interpolate_crop_stages(crop_df, total_days):
             ke_list.append(ke)
     return kcb_list[:total_days], root_list[:total_days], p_list[:total_days], ke_list[:total_days]
 
-def SIMdualKc(weather_df, crop_df, soil_df, track_drain):
+def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True):
     days = len(weather_df)
     profile_depth = soil_df['Depth_mm'].sum()
     Kcb_list, RD_list, p_list, Ke_list = interpolate_crop_stages(crop_df, days)
@@ -203,8 +211,7 @@ def fetch_weather_data(lat, lon, start_date, end_date):
 def fetch_soil_data(lat, lon):
     """
     Query SoilGrids API for soil properties at the given point.
-    Returns a DataFrame with columns: Depth_mm, FC, WP, TEW, REW.
-    (In a real app you would parse the JSON to compute these; here we use a simplified approach.)
+    Returns a DataFrame with a two-layer soil profile.
     """
     url = f"https://rest.soilgrids.org/query?lon={lon}&lat={lat}"
     r = requests.get(url)
@@ -212,32 +219,29 @@ def fetch_soil_data(lat, lon):
         st.error("Error fetching soil data from SoilGrids.")
         return None
     data = r.json()
-    # Here we assume that you process 'data' to compute soil properties.
-    # For demonstration we return a two-layer soil profile.
+    # In a real application, process 'data' to compute properties.
     soil_df = pd.DataFrame({
         "Depth_mm": [200, 100],
-        "FC": [0.30, 0.30],      # Field capacity (volumetric fraction)
-        "WP": [0.15, 0.15],      # Wilting point
-        "TEW": [200, 0],         # Total extractable water (mm) from first layer
-        "REW": [50, 0]           # Readily extractable water (mm) from first layer
+        "FC": [0.30, 0.30],
+        "WP": [0.15, 0.15],
+        "TEW": [200, 0],
+        "REW": [50, 0]
     })
     return soil_df
 
 def fetch_ndvi_data(study_area, start_date, end_date):
     """
-    In a real implementation, use Sentinel-2/Landsat via Google Earth Engine or a STAC API
-    to compute NDVI over the study area for the given date range.
-    Here we return a constant NDVI value.
+    Use an external API (e.g., Sentinel-2 via GEE or STAC) to compute NDVI over the study area.
+    Here we return a constant NDVI value for demonstration.
     """
-    return 0.6  # Example constant NDVI
+    return 0.6
 
 def get_crop_data(ndvi, num_days):
     """
     Convert NDVI to a basal crop coefficient (Kcb) using a simple relationship.
-    Returns a one-stage crop DataFrame covering the simulation period.
+    Returns a crop stage DataFrame covering the simulation period.
     """
-    # Example relationship (this is illustrative):
-    kcb = 0.1 + 1.1 * ndvi  # Adjust as needed
+    kcb = 0.1 + 1.1 * ndvi
     crop_df = pd.DataFrame({
         "Start_Day": [1],
         "End_Day": [num_days],
@@ -247,6 +251,21 @@ def get_crop_data(ndvi, num_days):
         "Ke": [1.0]
     })
     return crop_df
+
+# -------------------
+# Helper: Create a grid of points within a polygon
+# -------------------
+def create_grid_in_polygon(polygon, spacing=0.1):
+    minx, miny, maxx, maxy = polygon.bounds
+    xs = np.arange(minx, maxx, spacing)
+    ys = np.arange(miny, maxy, spacing)
+    points = []
+    for x in xs:
+        for y in ys:
+            pt = Point(x, y)
+            if polygon.contains(pt):
+                points.append(pt)
+    return points
 
 # -------------------
 # Mode Selection
@@ -307,8 +326,6 @@ if mode == "Normal Mode":
             results_df = SIMdualKc(weather_df, crop_df, soil_df, track_drainage)
             results_df['SWC (%)'] = (results_df['SW_root (mm)'] / results_df['Root_Depth (mm)']) * 100
 
-            # (Optional) Yield and Leaching Calculations would be added here
-
             tab1, tab2, tab3, tab4 = st.tabs(["📄 Daily Results", "📈 ET Graphs", "💧 Storage", "🌾 Yield and Leaching"])
             with tab1:
                 st.dataframe(results_df)
@@ -352,21 +369,21 @@ if mode == "Normal Mode":
         st.info("📂 Please upload all required files and click 'Run Simulation' to begin.")
 
 # =========================================
-# SPATIAL MODE (Use drawn polygon to fetch online data and run simulation)
+# SPATIAL MODE (Use drawn polygon to fetch online data and run grid-based simulation)
 # =========================================
 elif mode == "Spatial Mode":
     st.markdown("### 🌍 Spatial Mode Activated")
-    st.info("Draw your field boundary below. The app will then query real online data for weather, soil, and NDVI, and run the water balance simulation.")
+    st.info("Draw your field boundary below. The app will then download online data for your field and simulate the water balance on a grid, displaying spatial maps of outputs.")
 
-    # Step 1: Show an interactive map with a drawing tool (no lat/lon input required)
-    default_center = [36.7783, -119.4179]  # Default center (e.g., central California)
+    # Step 1: Let the user draw a polygon (field boundary) on an interactive Folium map
+    default_center = [36.7783, -119.4179]
     m = folium.Map(location=default_center, zoom_start=7, tiles="Esri.WorldImagery")
     draw = Draw(export=True)
     draw.add_to(m)
     st.info("Use the drawing tool to delineate your field (polygon).")
     map_data = st_folium(m, key="map", width=700, height=500)
 
-    # Step 2: Extract drawn polygon(s)
+    # Step 2: Extract the drawn polygon(s)
     study_area = None
     if map_data and map_data.get("all_drawings"):
         drawings = map_data["all_drawings"]
@@ -377,73 +394,81 @@ elif mode == "Spatial Mode":
                 if geom:
                     shapes.append(shape(geom))
             if shapes:
+                # If more than one polygon is drawn, merge them into a single geometry
                 study_area = gpd.GeoDataFrame(geometry=shapes, crs="EPSG:4326")
-                # For display with st.map, compute centroids:
-                study_area["lat"] = study_area.centroid.y
-                study_area["lon"] = study_area.centroid.x
+                unified = study_area.unary_union
                 st.write("### Your Field Boundary")
-                st.map(study_area[["lat", "lon"]])
+                st.write(unified)
 
     if study_area is not None:
-        st.subheader("Run Spatial Simulation")
-        if st.button("Run Spatial Simulation"):
-            try:
-                # Use the centroid of the first drawn polygon for point queries:
-                centroid = study_area.geometry.centroid.iloc[0]
-                lat_centroid = centroid.y
-                lon_centroid = centroid.x
+        # Use the unified polygon for data queries
+        unified_polygon = study_area.unary_union
+        # Create a grid of points within the polygon (adjust spacing as needed)
+        spacing = st.number_input("Grid spacing (degrees)", min_value=0.01, max_value=0.5, value=0.1, step=0.01)
+        grid_points = create_grid_in_polygon(unified_polygon, spacing=spacing)
+        if not grid_points:
+            st.error("No grid points generated. Try a smaller grid spacing or check your polygon.")
+        else:
+            st.write(f"Generated {len(grid_points)} sample points within the field.")
+            # Display the grid points on a simple map
+            grid_gdf = gpd.GeoDataFrame(geometry=grid_points, crs="EPSG:4326")
+            grid_gdf["lat"] = grid_gdf.geometry.y
+            grid_gdf["lon"] = grid_gdf.geometry.x
+            st.map(grid_gdf[["lat", "lon"]])
 
-                # Define simulation period (e.g., last 30 days)
-                end_date = datetime.date.today()
-                start_date = end_date - datetime.timedelta(days=29)
-
-                # Fetch real weather data from NASA POWER:
-                weather_df = fetch_weather_data(lat_centroid, lon_centroid, start_date, end_date)
-                if weather_df is None:
-                    st.error("Failed to retrieve weather data.")
-                    st.stop()
-
-                # Fetch soil data from SoilGrids:
-                soil_df = fetch_soil_data(lat_centroid, lon_centroid)
-                if soil_df is None:
-                    st.error("Failed to retrieve soil data.")
-                    st.stop()
-
-                # Fetch NDVI data (here, a constant value is returned; replace with your API call)
-                ndvi = fetch_ndvi_data(study_area, start_date, end_date)
-
-                # Generate crop stage data from NDVI (simple conversion)
-                crop_df = get_crop_data(ndvi, len(weather_df))
-
-                # Run the water balance simulation:
-                results_df = SIMdualKc(weather_df, crop_df, soil_df, track_drain=True)
-                results_df['SWC (%)'] = (results_df['SW_root (mm)'] / results_df['Root_Depth (mm)']) * 100
-
-                # Display results in tabs:
-                tab1, tab2, tab3, tab4 = st.tabs(["📄 Daily Results", "📈 ET Graphs", "💧 Storage", "🌾 Yield and Leaching"])
-                with tab1:
-                    st.dataframe(results_df)
-                    csv = results_df.to_csv(index=False)
-                    st.download_button("📥 Download Results (.txt)", csv, file_name="spatial_simulation_results.txt")
-                with tab2:
-                    fig, ax = plt.subplots()
-                    ax.plot(results_df["Date"], results_df["ETa_transp (mm)"], label="Transpiration")
-                    ax.plot(results_df["Date"], results_df["ETa_evap (mm)"], label="Evaporation")
-                    ax.plot(results_df["Date"], results_df["ETc (mm)"], label="ETc")
-                    ax.set_ylabel("ET (mm)")
-                    ax.legend()
-                    ax.grid(True)
-                    st.pyplot(fig)
-                with tab3:
-                    fig2, ax2 = plt.subplots()
-                    ax2.plot(results_df["Date"], results_df["SW_root (mm)"], label="Root Zone SW")
-                    ax2.set_ylabel("Soil Water (mm)")
-                    ax2.legend()
-                    ax2.grid(True)
-                    st.pyplot(fig2)
-                with tab4:
-                    st.write("Yield and leaching calculations can be integrated here based on additional crop data.")
-            except Exception as e:
-                st.error(f"⚠️ Spatial simulation failed: {e}")
+            st.subheader("Run Spatial Simulation")
+            if st.button("Run Spatial Simulation"):
+                try:
+                    # Define simulation period (e.g., last 30 days)
+                    end_date = datetime.date.today()
+                    start_date = end_date - datetime.timedelta(days=29)
+                    # For each grid point, query online data and run the simulation.
+                    # We will extract one key output (e.g., final SW_surface) for mapping.
+                    results_list = []
+                    for pt in grid_points:
+                        lat_pt = pt.y
+                        lon_pt = pt.x
+                        # Fetch weather, soil, and NDVI data for this point
+                        weather_df = fetch_weather_data(lat_pt, lon_pt, start_date, end_date)
+                        if weather_df is None:
+                            continue
+                        soil_df = fetch_soil_data(lat_pt, lon_pt)
+                        if soil_df is None:
+                            continue
+                        ndvi = fetch_ndvi_data(unified_polygon, start_date, end_date)
+                        crop_df = get_crop_data(ndvi, len(weather_df))
+                        sim_df = SIMdualKc(weather_df, crop_df, soil_df, track_drain=True)
+                        # Take the last day value for SW_surface as an example output
+                        final_SW = sim_df.iloc[-1]["SW_surface (mm)"]
+                        results_list.append({"lat": lat_pt, "lon": lon_pt, "SW_surface": final_SW})
+                    
+                    if not results_list:
+                        st.error("No simulation results were generated for the grid.")
+                    else:
+                        spatial_results = pd.DataFrame(results_list)
+                        # Create a GeoDataFrame for mapping
+                        spatial_gdf = gpd.GeoDataFrame(
+                            spatial_results,
+                            geometry=gpd.points_from_xy(spatial_results.lon, spatial_results.lat),
+                            crs="EPSG:4326"
+                        )
+                        st.write("### Spatial Output: Final Surface Soil Water (mm)")
+                        st.dataframe(spatial_results)
+                        # Plot spatial output on an interactive Folium map
+                        m_out = folium.Map(location=default_center, zoom_start=7, tiles="Esri.WorldImagery")
+                        for idx, row in spatial_gdf.iterrows():
+                            # Color-code markers based on SW_surface value (this is a simple example)
+                            color = "blue" if row["SW_surface"] > 100 else "red"
+                            folium.CircleMarker(
+                                location=[row["lat"], row["lon"]],
+                                radius=5,
+                                popup=f"SW_surface: {row['SW_surface']:.1f} mm",
+                                color=color,
+                                fill=True,
+                                fill_opacity=0.7
+                            ).add_to(m_out)
+                        st_folium(m_out, width=700, height=500)
+                except Exception as e:
+                    st.error(f"⚠️ Spatial simulation failed: {e}")
     else:
         st.info("Please draw your field boundary on the map above to run the spatial simulation.")
