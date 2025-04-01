@@ -26,36 +26,47 @@ with st.sidebar:
     crop_file = st.file_uploader("Crop Stage Data (.txt)", type="txt")
     soil_file = st.file_uploader("Soil Layers (.txt)", type="txt")
     
-    st.header("Options")
+    st.header("Simulation Options")
     show_monthly_summary = st.checkbox("Show Monthly Summary", value=True)
     track_drainage = st.checkbox("Track Drainage", value=True)
     
+    # Yield Estimation Section
     st.header("Yield Estimation")
-    enable_yield = st.checkbox("Enable Yield Estimation", value=False)
+    enable_yield = st.checkbox("Enable Yield Estimation", value=False, key='yield_enable')
     if enable_yield:
-        st.subheader("Select Methods")
-        use_fao33 = st.checkbox("Use FAO-33 Ky-based method", value=True)
-        use_transp = st.checkbox("Use Transpiration-based method", value=False)
+        st.subheader("Yield Calculation Methods")
+        use_fao33 = st.checkbox("Use FAO-33 Ky-based method", value=True, key='fao33')
+        use_transp = st.checkbox("Use Transpiration-based method", value=False, key='transp')
+        
         if use_fao33:
-            Ym = st.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1)
-            Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
+            Ym = st.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1, key='ym')
+            Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1, key='ky')
+        
         if use_transp:
-            WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
-    
+            WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", 
+                                      min_value=0.0, value=0.01, step=0.001, key='wp_yield')
+
+    # Leaching Estimation Section
     st.header("Leaching Estimation")
-    enable_leaching = st.checkbox("Enable Leaching Estimation", value=False)
+    enable_leaching = st.checkbox("Enable Leaching Estimation", value=False, key='leaching_enable')
     if enable_leaching:
-        leaching_method = st.radio("Select Leaching Method", [
-            "Method 1: Drainage × nitrate concentration",
-            "Method 2: Leaching Fraction × total N input"
-        ])
-        if leaching_method == "Method 1: Drainage × nitrate concentration":
-            nitrate_conc = st.number_input("Nitrate Concentration (mg/L)", min_value=0.0, value=10.0, step=0.1)
-        elif leaching_method == "Method 2: Leaching Fraction × total N input":
-            total_N_input = st.number_input("Total N Input (kg/ha)", min_value=0.0, value=100.0, step=1.0)
-            leaching_fraction = st.number_input("Leaching Fraction (0-1)", min_value=0.0, max_value=1.0, value=0.1, step=0.01)
-    
-    run_button = st.button("🚀 Run Simulation")
+        st.subheader("Leaching Calculation Methods")
+        leaching_method = st.radio("Select Method:", [
+            "Drainage × nitrate concentration",
+            "Leaching Fraction × total N input"
+        ], key='leach_method')
+        
+        if leaching_method == "Drainage × nitrate concentration":
+            nitrate_conc = st.number_input("Nitrate Concentration (mg/L)", 
+                                          min_value=0.0, value=10.0, step=0.1, key='nitrate')
+        else:
+            total_N_input = st.number_input("Total N Input (kg/ha)", 
+                                           min_value=0.0, value=100.0, step=1.0, key='n_input')
+            leaching_fraction = st.number_input("Leaching Fraction (0-1)", 
+                                              min_value=0.0, max_value=1.0, value=0.1, step=0.01, key='leach_frac')
+
+    run_button = st.button("🚀 Run Simulation", type='primary')
+
 
 # -------------------
 # Helper Functions
