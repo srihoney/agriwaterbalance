@@ -31,7 +31,7 @@ track_drainage = st.sidebar.checkbox("Track Drainage", value=True)
 
 # Yield Estimation (single declaration)
 st.sidebar.header("Yield Estimation")
-enable_yield = st.sidebar.checkbox("Enable Yield Estimation", value=False)
+enable_yield = st.sidebar.checkbox("Enable Yield Estimation", value=True)
 if enable_yield:
     st.sidebar.subheader("Select Methods")
     use_fao33 = st.sidebar.checkbox("Use FAO-33 Ky-based method", value=True)
