@@ -1,17 +1,3 @@
-# ---------------------------------------------
-# AgriWaterBalance | Final Enhanced App (With Toggles)
-# ---------------------------------------------
-# Features:
-# - Multi-layer soil water balance
-# - Dual Kcb and Ke coefficients
-# - Dynamic root depth, p, Ke by crop stage
-# - Cumulative ET, Irrigation, Precipitation, Drainage
-# - Optional toggles for drainage tracking and monthly summary
-# - Scientifically formatted outputs and plots
-# - Crop Yield Estimation (FAO-33 Ky-based and Transpiration-based)
-# - Leaching Estimation (Drainage × nitrate concentration and Leaching Fraction × total N input)
-# - Daily soil water content (SWC) calculation
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -32,7 +18,7 @@ with col2:
     st.markdown("**A research-grade, multi-layer soil water balance tool for any crop and soil.**")
 
 # -------------------
-# Sidebar: File Uploads, Toggles, and Run Button
+# Sidebar: File Uploads, Options, and Run Button
 # -------------------
 st.sidebar.header("Upload Input Files (.txt)")
 weather_file = st.sidebar.file_uploader("Weather Data (.txt)", type="txt")
@@ -43,12 +29,7 @@ st.sidebar.header("Options")
 show_monthly_summary = st.sidebar.checkbox("Show Monthly Summary", value=True)
 track_drainage = st.sidebar.checkbox("Track Drainage", value=True)
 
-st.sidebar.header("Yield Estimation")
-enable_yield = st.sidebar.checkbox("Enable Yield Estimation", value=True)
-st.sidebar.header("Leaching Estimation")
-enable_leaching = st.sidebar.checkbox("Enable Leaching Estimation", value=True)
-
-# Yield Estimation
+# Yield Estimation (single declaration)
 st.sidebar.header("Yield Estimation")
 enable_yield = st.sidebar.checkbox("Enable Yield Estimation", value=False)
 if enable_yield:
@@ -61,7 +42,7 @@ if enable_yield:
     if use_transp:
         WP_yield = st.sidebar.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
 
-# Leaching Estimation
+# Leaching Estimation (single declaration)
 st.sidebar.header("Leaching Estimation")
 enable_leaching = st.sidebar.checkbox("Enable Leaching Estimation", value=False)
 if enable_leaching:
@@ -154,7 +135,7 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain):
             d = min(soil['Depth_mm'], RD - cum_depth)
             FC_total += soil['FC'] * d
             WP_total += soil['WP'] * d
-            SW_root += (SW_layers[j] / soil['Depth_mm']) * d  # Corrected
+            SW_root += (SW_layers[j] / soil['Depth_mm']) * d
             cum_depth += d
 
         TAW = FC_total - WP_total
@@ -200,8 +181,8 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain):
             "ETa_transp (mm)": ETa_transp,
             "ETa_evap (mm)": ETa_evap,
             "SW_surface (mm)": SW_surface,
-            "SW_root (mm)": SW_root,  # Corrected
-            "Root_Depth (mm)": RD,    # Added for SWC
+            "SW_root (mm)": SW_root,
+            "Root_Depth (mm)": RD,
             "Depletion (mm)": depletion,
             "TAW (mm)": TAW,
             "Storage_Deficit (mm)": storage_deficit,
@@ -224,7 +205,7 @@ if run_button and weather_file and crop_file and soil_file:
         crop_df = pd.read_csv(crop_file)
         soil_df = pd.read_csv(soil_file)
 
-        # Ensure track_drainage is True if leaching method 1 is selected
+        # Ensure drainage tracking is enabled if leaching method 1 is selected
         if enable_leaching and leaching_method == "Method 1: Drainage × nitrate concentration":
             track_drainage = True
             st.sidebar.info("ℹ️ Drainage tracking enabled for leaching estimation.")
@@ -254,7 +235,7 @@ if run_button and weather_file and crop_file and soil_file:
             elif leaching_method == "Method 2: Leaching Fraction × total N input":
                 total_leaching_kg_ha = leaching_fraction * total_N_input
 
-        # Tabs
+        # Tabs for displaying results
         tab1, tab2, tab3, tab4 = st.tabs(["📄 Daily Results", "📈 ET Graphs", "💧 Storage", "🌾 Yield and Leaching"])
 
         with tab1:
