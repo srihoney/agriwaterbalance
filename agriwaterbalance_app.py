@@ -26,52 +26,45 @@ with st.sidebar:
     crop_file = st.file_uploader("Crop Stage Data (.txt)", type="txt")
     soil_file = st.file_uploader("Soil Layers (.txt)", type="txt")
     
-    st.header("Simulation Options")
+    st.header("Options")
     show_monthly_summary = st.checkbox("Show Monthly Summary", value=True)
     track_drainage = st.checkbox("Track Drainage", value=True)
     
-    # Yield Estimation Section
     st.header("Yield Estimation")
-    enable_yield = st.checkbox("Enable Yield Estimation", value=False, key='yield_enable')
+    enable_yield = st.checkbox("Enable Yield Estimation", value=False)
     if enable_yield:
-        st.subheader("Yield Calculation Methods")
-        use_fao33 = st.checkbox("Use FAO-33 Ky-based method", value=True, key='fao33')
-        use_transp = st.checkbox("Use Transpiration-based method", value=False, key='transp')
-        
+        st.subheader("Select Methods")
+        use_fao33 = st.checkbox("Use FAO-33 Ky-based method", value=True)
+        use_transp = st.checkbox("Use Transpiration-based method", value=False)
         if use_fao33:
-            Ym = st.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1, key='ym')
-            Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1, key='ky')
-        
+            Ym = st.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1)
+            Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
         if use_transp:
-            WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", 
-                                      min_value=0.0, value=0.01, step=0.001, key='wp_yield')
-
-    # Leaching Estimation Section
+            WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
+    
     st.header("Leaching Estimation")
-    enable_leaching = st.checkbox("Enable Leaching Estimation", value=False, key='leaching_enable')
+    enable_leaching = st.checkbox("Enable Leaching Estimation", value=False)
     if enable_leaching:
-        st.subheader("Leaching Calculation Methods")
-        leaching_method = st.radio("Select Method:", [
-            "Drainage × nitrate concentration",
-            "Leaching Fraction × total N input"
-        ], key='leach_method')
-        
-        if leaching_method == "Drainage × nitrate concentration":
-            nitrate_conc = st.number_input("Nitrate Concentration (mg/L)", 
-                                          min_value=0.0, value=10.0, step=0.1, key='nitrate')
-        else:
-            total_N_input = st.number_input("Total N Input (kg/ha)", 
-                                           min_value=0.0, value=100.0, step=1.0, key='n_input')
-            leaching_fraction = st.number_input("Leaching Fraction (0-1)", 
-                                              min_value=0.0, max_value=1.0, value=0.1, step=0.01, key='leach_frac')
-
-    run_button = st.button("🚀 Run Simulation", type='primary')
-
+        leaching_method = st.radio("Select Leaching Method", [
+            "Method 1: Drainage × nitrate concentration",
+            "Method 2: Leaching Fraction × total N input"
+        ])
+        if leaching_method == "Method 1: Drainage × nitrate concentration":
+            nitrate_conc = st.number_input("Nitrate Concentration (mg/L)", min_value=0.0, value=10.0, step=0.1)
+        elif leaching_method == "Method 2: Leaching Fraction × total N input":
+            total_N_input = st.number_input("Total N Input (kg/ha)", min_value=0.0, value=100.0, step=1.0)
+            leaching_fraction = st.number_input("Leaching Fraction (0-1)", min_value=0.0, max_value=1.0, value=0.1, step=0.01)
+    
+    # --- Dummy Tab on Sidebar ---
+    st.header("Dummy Tab")
+    dummy_option = st.radio("Dummy Option", ["Option A", "Option B", "Option C"])
+    
+    run_button = st.button("🚀 Run Simulation")
 
 # -------------------
 # Helper Functions
 # -------------------
-def compute_Ks(depletion, TAW, p):
+def compute_Ks(depletion, TAW, p=0.5):
     RAW = p * TAW
     if depletion <= RAW:
         return 1.0
@@ -113,9 +106,6 @@ def interpolate_crop_stages(crop_df, total_days):
             ke_list.append(ke)
     return kcb_list[:total_days], root_list[:total_days], p_list[:total_days], ke_list[:total_days]
 
-# -------------------
-# Core Simulation Function
-# -------------------
 def SIMdualKc(weather_df, crop_df, soil_df, track_drain):
     days = len(weather_df)
     profile_depth = soil_df['Depth_mm'].sum()
@@ -175,7 +165,6 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain):
             SW_layers[j] = min(SW_layers[j], max_SW)
             water = drain
 
-            # Transpiration extraction
             if cum_depth < RD:
                 transp = ETa_transp * (soil['Depth_mm'] / RD)
                 SW_layers[j] -= transp
@@ -207,7 +196,7 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain):
     return pd.DataFrame(results)
 
 # -------------------
-# Run the Simulation
+# Run the Simulation (if all files are uploaded)
 # -------------------
 if run_button and weather_file and crop_file and soil_file:
     try:
@@ -215,17 +204,14 @@ if run_button and weather_file and crop_file and soil_file:
         crop_df = pd.read_csv(crop_file)
         soil_df = pd.read_csv(soil_file)
 
-        # Enable drainage tracking if leaching method 1 is selected
+        # If using leaching method 1, force drainage tracking to True.
         if enable_leaching and leaching_method == "Method 1: Drainage × nitrate concentration":
             track_drainage = True
             st.sidebar.info("ℹ️ Drainage tracking enabled for leaching estimation.")
 
         results_df = SIMdualKc(weather_df, crop_df, soil_df, track_drainage)
-
-        # Add SWC calculation
         results_df['SWC (%)'] = (results_df['SW_root (mm)'] / results_df['Root_Depth (mm)']) * 100
 
-        # Calculate yield if enabled
         if enable_yield:
             total_ETa = results_df['Cumulative_ETa (mm)'].iloc[-1]
             total_ETc = results_df['Cumulative_ETc (mm)'].iloc[-1]
@@ -235,45 +221,37 @@ if run_button and weather_file and crop_file and soil_file:
             if use_transp:
                 Ya_transp = WP_yield * total_T_act
 
-        # Calculate leaching if enabled
         if enable_leaching:
             if leaching_method == "Method 1: Drainage × nitrate concentration":
                 daily_drainage = results_df['Cumulative_Drainage (mm)'].diff().fillna(0)
                 daily_leaching = daily_drainage * nitrate_conc  # mg/m²
                 total_leaching_mg_m2 = daily_leaching.sum()
-                total_leaching_kg_ha = total_leaching_mg_m2 * 0.01  # Convert mg/m² to kg/ha
+                total_leaching_kg_ha = total_leaching_mg_m2 * 0.01
             elif leaching_method == "Method 2: Leaching Fraction × total N input":
                 total_leaching_kg_ha = leaching_fraction * total_N_input
 
-        # -------------------
-        # Tabs for Displaying Results
-        # -------------------
+        # Tabs for displaying simulation results
         tab1, tab2, tab3, tab4 = st.tabs(["📄 Daily Results", "📈 ET Graphs", "💧 Storage", "🌾 Yield and Leaching"])
 
         with tab1:
             st.dataframe(results_df)
-            st.download_button("📥 Download Results (.txt)",
-                               results_df.to_csv(index=False),
-                               file_name="agriwaterbalance_results.txt")
-
+            st.download_button("📥 Download Results (.txt)", results_df.to_csv(index=False), file_name="agriwaterbalance_results.txt")
         with tab2:
             fig, ax = plt.subplots()
-            ax.plot(results_df['Date'], results_df['ETa_transp (mm)'], label='Transpiration')
-            ax.plot(results_df['Date'], results_df['ETa_evap (mm)'], label='Evaporation')
-            ax.plot(results_df['Date'], results_df['ETc (mm)'], label='ETc')
+            ax.plot(results_df['Date'], results_df['ETa_transp (mm)'], label="Transpiration")
+            ax.plot(results_df['Date'], results_df['ETa_evap (mm)'], label="Evaporation")
+            ax.plot(results_df['Date'], results_df['ETc (mm)'], label="ETc")
             ax.set_ylabel("ET (mm)")
             ax.legend()
             ax.grid(True)
             st.pyplot(fig)
-
         with tab3:
             fig2, ax2 = plt.subplots()
-            ax2.plot(results_df['Date'], results_df['SW_root (mm)'], label='Root Zone SW', color='green')
+            ax2.plot(results_df['Date'], results_df['SW_root (mm)'], label="Root Zone SW", color="green")
             ax2.set_ylabel("Soil Water (mm)")
             ax2.legend()
             ax2.grid(True)
             st.pyplot(fig2)
-
         with tab4:
             if enable_yield:
                 st.subheader("Crop Yield Estimation")
@@ -284,23 +262,21 @@ if run_button and weather_file and crop_file and soil_file:
             if enable_leaching:
                 st.subheader("Leaching Estimation")
                 st.write(f"Total Leaching: {total_leaching_kg_ha:.2f} kg/ha")
-
-        # Monthly Summary Tab (Optional)
+        
         if show_monthly_summary:
             st.subheader("📆 Monthly Summary")
             monthly = results_df.copy()
-            monthly['Month'] = monthly['Date'].dt.to_period('M')
-            summary = monthly.groupby('Month').agg({
-                'ET0 (mm)': 'mean',
-                'ETc (mm)': 'mean',
-                'ETa_transp (mm)': 'mean',
-                'ETa_evap (mm)': 'mean',
-                'Cumulative_Irrigation (mm)': 'max',
-                'Cumulative_Precip (mm)': 'max',
-                'Stress_Days': 'max'
+            monthly['Month'] = monthly['Date'].dt.to_period("M")
+            summary = monthly.groupby("Month").agg({
+                "ET0 (mm)":"mean",
+                "ETc (mm)":"mean",
+                "ETa_transp (mm)":"mean",
+                "ETa_evap (mm)":"mean",
+                "Cumulative_Irrigation (mm)":"max",
+                "Cumulative_Precip (mm)":"max",
+                "Stress_Days":"max"
             }).reset_index()
             st.dataframe(summary)
-
     except Exception as e:
         st.error(f"⚠️ Simulation failed: {e}")
 else:
