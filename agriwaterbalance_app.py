@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import geopandas as gpd
+from shapely.geometry import box
 
 # -------------------
 # App Configuration
@@ -16,6 +18,15 @@ with col1:
 with col2:
     st.title("AgriWaterBalance")
     st.markdown("**A research-grade, multi-layer soil water balance tool for any crop and soil.**")
+# -------------------
+# Mode Selection
+# -------------------
+mode = st.radio("Choose Mode:", ["Normal Mode", "Spatial Mode"], horizontal=True)
+
+# -------------------
+# Normal Mode
+# -------------------
+if mode == "Normal Mode":
 
 # -------------------
 # Sidebar: All Widgets in One Container
@@ -294,3 +305,32 @@ if run_button and weather_file and crop_file and soil_file:
         st.error(f"⚠️ Simulation failed: {e}")
 else:
     st.info("📂 Please upload all required files and click 'Run Simulation' to begin.")
+    
+# -------------------
+# Spatial Mode
+# -------------------
+elif mode == "Spatial Mode":
+    st.markdown("### 🌍 Spatial Mode Activated")
+
+    st.info("In spatial mode, you can draw/select a region of interest and auto-fetch soil/weather data (experimental).")
+
+    # Step 1: Get Bounding Box from User
+    st.subheader("Step 1: Define Area of Interest")
+    lat = st.number_input("Latitude (center)", value=36.7783)
+    lon = st.number_input("Longitude (center)", value=-119.4179)
+    buffer_km = st.slider("Buffer around point (km)", 1, 20, 5)
+
+    bounds = box(lon - 0.1, lat - 0.1, lon + 0.1, lat + 0.1)
+    gdf = gpd.GeoDataFrame(index=[0], crs='EPSG:4326', geometry=[bounds])
+    st.map(gdf)
+
+    # Step 2: Fetch Data (placeholder)
+    st.subheader("Step 2: Fetch Data for Region")
+    if st.button("🔍 Get Spatial Data"):
+        st.success("✔️ Fetched spatial data (mockup)")
+        st.code("Soil FC: 0.25\nSoil WP: 0.12\nET0: daily series from NASA POWER\nNDVI → Kcb extracted from Sentinel-2")
+        st.download_button("⬇️ Download Example Spatial Inputs (.txt)", "Soil_Layer_Spatial.txt")
+        st.markdown("Now you're ready to simulate spatial zones (feature coming soon!)")
+
+    st.subheader("(Coming Soon) Run Simulation on Spatial Zones")
+    st.markdown("This will allow you to simulate per-grid or per-zone water balance using fetched data.")
