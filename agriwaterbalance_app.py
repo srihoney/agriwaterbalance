@@ -43,6 +43,11 @@ st.sidebar.header("Options")
 show_monthly_summary = st.sidebar.checkbox("Show Monthly Summary", value=True)
 track_drainage = st.sidebar.checkbox("Track Drainage", value=True)
 
+st.sidebar.header("Yield Estimation")
+enable_yield = st.sidebar.checkbox("Enable Yield Estimation", value=False)
+st.sidebar.header("Leaching Estimation")
+enable_leaching = st.sidebar.checkbox("Enable Leaching Estimation", value=False)
+
 # Yield Estimation
 st.sidebar.header("Yield Estimation")
 enable_yield = st.sidebar.checkbox("Enable Yield Estimation", value=False)
