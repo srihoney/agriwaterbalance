@@ -316,7 +316,10 @@ elif mode == "Spatial Mode":
     
     bounds = box(lon - 0.1, lat - 0.1, lon + 0.1, lat + 0.1)
     gdf = gpd.GeoDataFrame(index=[0], crs='EPSG:4326', geometry=[bounds])
-    st.map(gdf)
+    # Extract centroid coordinates for mapping
+    gdf["lat"] = gdf.geometry.centroid.y
+    gdf["lon"] = gdf.geometry.centroid.x
+    st.map(gdf[["lat", "lon"]])
     
     # Step 2: Fetch Data (placeholder)
     st.subheader("Step 2: Fetch Data for Region")
