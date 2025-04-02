@@ -1,11 +1,3 @@
-pip install streamlit folium geopandas streamlit-folium requests
-```)
-
-Below is the full working code:
-
----
-
-```python
 import streamlit as st
 import pandas as pd
 import numpy as np
