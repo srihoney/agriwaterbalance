@@ -156,7 +156,6 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
 
     results_df = pd.DataFrame(results)
 
-    # Yield calculations
     if enable_yield:
         if use_fao33:
             ETc_total = results_df['ETc (mm)'].sum()
@@ -167,10 +166,9 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
             Ya_transp = WP_yield * cum_transp
             results_df['Yield (ton/ha)'] = Ya_transp
 
-    # Leaching calculations
     if enable_leaching:
         if leaching_method == "Method 1: Drainage × nitrate concentration":
-            leaching = cum_drain * nitrate_conc / 1000  # Convert mg/L to kg/ha
+            leaching = cum_drain * nitrate_conc / 1000
             results_df['Leaching (kg/ha)'] = leaching
         elif leaching_method == "Method 2: Leaching Fraction × total N input":
             leaching = leaching_fraction * total_N_input
@@ -197,8 +195,6 @@ def fetch_weather_data(lat, lon, start_date, end_date):
         response = requests.get("https://power.larc.nasa.gov/api/temporal/daily/point", params=params)
         response.raise_for_status()
         data = response.json()['properties']['parameter']
-        
-        # Determine precipitation key; if missing, use default value 0 for each day
         if "PRECTOT" in data:
             precip_key = "PRECTOT"
         elif "PRECTOTCORG" in data:
@@ -215,12 +211,11 @@ def fetch_weather_data(lat, lon, start_date, end_date):
             Tmax = data['T2M_MAX'][date_str]
             Tmin = data['T2M_MIN'][date_str]
             Tmean = (Tmax + Tmin) / 2
-            Rs = data['ALLSKY_SFC_SW_DWN'][date_str]  # MJ/m²/day
-            u2 = data['WS2M'][date_str]               # m/s
-            RH = data['RH2M'][date_str]               # %
-            
+            Rs = data['ALLSKY_SFC_SW_DWN'][date_str]
+            u2 = data['WS2M'][date_str]
+            RH = data['RH2M'][date_str]
             delta = 4098 * (0.6108 * math.exp((17.27 * Tmean)/(Tmean + 237.3))) / (Tmean + 237.3)**2
-            P = 101.3  # kPa
+            P = 101.3
             gamma = 0.000665 * P
             es = (0.6108 * math.exp(17.27 * Tmax/(Tmax + 237.3)) + 0.6108 * math.exp(17.27 * Tmin/(Tmin + 237.3))) / 2
             ea = es * RH / 100
@@ -256,7 +251,6 @@ def fetch_soil_data(lat, lon):
         response = requests.get(url, params=params)
         response.raise_for_status()
         data = response.json()
-        
         properties = data['properties']
         layers = []
         for depth in ['0-5cm', '5-15cm']:
@@ -270,7 +264,6 @@ def fetch_soil_data(lat, lon):
             WP = (-0.024 * sand/100 + 0.487 * clay/100 + 0.006 * ocd +
                   0.005 * (sand/100) * ocd - 0.013 * (clay/100) * ocd +
                   0.068 * (sand/100) * (clay/100) + 0.031) * bdod
-            
             layers.append({
                 "Depth_mm": 50 if depth == '0-5cm' else 100,
                 "FC": FC,
@@ -278,7 +271,6 @@ def fetch_soil_data(lat, lon):
                 "TEW": 200 if depth == '0-5cm' else 0,
                 "REW": 50 if depth == '0-5cm' else 0
             })
-        
         return pd.DataFrame(layers)
     except Exception as e:
         st.warning(f"Soil data fetch failed: {str(e)}. Using default values.")
@@ -291,17 +283,11 @@ def fetch_soil_data(lat, lon):
         })
 
 def fetch_ndvi_data(study_area, start_date, end_date):
-    """
-    Fetch NDVI data using an external API (e.g., Sentinel-2 via GEE or STAC).
-    For demonstration, returns a constant NDVI.
-    """
+    """Fetch NDVI data. Here we return a constant NDVI."""
     return 0.6
 
 def get_crop_data(ndvi, num_days):
-    """
-    Convert NDVI to a basal crop coefficient (Kcb) using a simple relationship.
-    Returns a crop stage DataFrame covering the simulation period.
-    """
+    """Convert NDVI to crop stage data."""
     kcb = 0.1 + 1.1 * ndvi
     crop_df = pd.DataFrame({
         "Start_Day": [1],
@@ -314,12 +300,7 @@ def get_crop_data(ndvi, num_days):
     return crop_df
 
 def create_grid_in_polygon(polygon, spacing=0.01):
-    """
-    Create grid points within a polygon.
-    - polygon: a shapely Polygon in EPSG:4326.
-    - spacing: grid spacing in kilometers.
-    Returns a list of shapely Points (in EPSG:4326).
-    """
+    """Create grid points within a polygon (spacing in km)."""
     gdf = gpd.GeoDataFrame(geometry=[polygon], crs="EPSG:4326")
     utm_crs = gdf.estimate_utm_crs()
     gdf_utm = gdf.to_crs(utm_crs)
@@ -342,8 +323,6 @@ def create_grid_in_polygon(polygon, spacing=0.01):
 # -------------------
 st.title("AgriWaterBalance")
 st.markdown("**Spatiotemporal Soil Water Balance Modeling**")
-
-# Mode selection
 mode = st.radio("Operation Mode:", ["Normal Mode", "Spatial Mode"], horizontal=True)
 
 # ========= NORMAL MODE =========
@@ -448,7 +427,7 @@ if mode == "Normal Mode":
                 st.error(f"⚠️ Simulation failed: {e}")
     else:
         st.info("📂 Please upload all required files and click 'Run Simulation'.")
-        
+
 # ========= SPATIAL MODE =========
 elif mode == "Spatial Mode":
     st.markdown("### 🌍 Spatial Analysis Mode")
@@ -508,6 +487,8 @@ elif mode == "Spatial Mode":
                             "SW_root (mm)": final_sw,
                             "Mean_ETa (mm/day)": mean_et
                         })
+                    else:
+                        st.warning(f"Skipping point ({lat_pt:.4f}, {lon_pt:.4f}) due to missing data.")
                     progress_bar.progress((i+1)/len(grid_points))
                 if results:
                     results_df = pd.DataFrame(results)
@@ -520,15 +501,9 @@ elif mode == "Spatial Mode":
                             zoom_start=10,
                             tiles="CartoDB positron"
                         )
-                        # Prepare heatmap data as list of lists of floats
                         heat_data = [[float(r[0]), float(r[1]), float(r[2])] 
                                      for r in results_df[['lat', 'lon', 'SW_root (mm)']].values.tolist()]
-                        # Remove custom gradient to avoid error
-                        HeatMap(
-                            data=heat_data,
-                            radius=12,
-                            blur=20
-                        ).add_to(m_results)
+                        HeatMap(data=heat_data, radius=12, blur=20).add_to(m_results)
                         for idx, row in results_df.iterrows():
                             folium.CircleMarker(
                                 location=[row['lat'], row['lon']],
