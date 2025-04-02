@@ -64,7 +64,6 @@ def interpolate_crop_stages(crop_df, total_days):
             root_list.append(root)
             p_list.append(p)
             ke_list.append(ke)
-    # Here we treat the "root depth" as the second output (RD_list)
     return kcb_list[:total_days], root_list[:total_days], p_list[:total_days], ke_list[:total_days]
 
 def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False, 
@@ -186,7 +185,7 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
 def fetch_weather_data(lat, lon, start_date, end_date):
     """Fetch weather data from NASA POWER API with ET0 calculation."""
     params = {
-        "parameters": "T2M_MAX,T2M_MIN,PRECTOTCORG,WS2M,RH2M,ALLSKY_SFC_SW_DWN",
+        "parameters": "T2M_MAX,T2M_MIN,PRECTOT,WS2M,RH2M,ALLSKY_SFC_SW_DWN",
         "community": "AG",
         "latitude": lat,
         "longitude": lon,
@@ -224,7 +223,7 @@ def fetch_weather_data(lat, lon, start_date, end_date):
         weather_df = pd.DataFrame({
             "Date": dates,
             "ET0": et0_list,
-            "Precipitation": [data['PRECTOTCORG'][d] for d in data['PRECTOTCORG']],
+            "Precipitation": [data['PRECTOT'][d] for d in data['PRECTOT']],
             "Irrigation": [0] * len(dates)
         })
         return weather_df
@@ -471,7 +470,7 @@ elif mode == "Spatial Mode":
                 if not shapes:
                     st.error("No polygon drawn.")
                     st.stop()
-                study_area = gpd.GeoSeries(shapes).unary_union  # Merge if multiple polygons
+                study_area = gpd.GeoSeries(shapes).unary_union  # Merge polygons if multiple drawn
                 st.markdown("### Your Field Boundary")
                 st.write(study_area)
                 
@@ -571,6 +570,7 @@ elif mode == "Spatial Mode":
                         st.download_button("🌐 Download GeoJSON", geojson, file_name="spatial_results.geojson", mime="application/json")
                 else:
                     st.warning("No results generated! Check input data sources.")
+                        
             except Exception as e:
                 st.error(f"Spatial analysis failed: {str(e)}")
         else:
