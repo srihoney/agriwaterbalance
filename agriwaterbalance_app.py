@@ -576,7 +576,8 @@ elif mode == "Spatial Mode":
                 status_text = st.empty()
                 
                 # Get centroid for representative weather data
-                centroid = study_area.centroid[0]
+                # Fixed: Access centroid directly without indexing
+                centroid = study_area.centroid
                 centroid_lat, centroid_lon = centroid.y, centroid.x
                 
                 # Fetch weather data for the centroid
