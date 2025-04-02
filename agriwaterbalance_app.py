@@ -199,13 +199,13 @@ def fetch_weather_data(lat, lon, start_date, end_date):
         response.raise_for_status()
         data = response.json()['properties']['parameter']
         
-        # Check for precipitation key; if not found, try alternate key
+        # Determine precipitation key; use default 0 if not found
         if "PRECTOT" in data:
             precip_key = "PRECTOT"
         elif "PRECTOTCORG" in data:
             precip_key = "PRECTOTCORG"
         else:
-            raise KeyError("Precipitation parameter not found in response.")
+            precip_key = None
         
         dates = []
         et0_list = []
@@ -228,7 +228,10 @@ def fetch_weather_data(lat, lon, start_date, end_date):
             ea = es * RH / 100
             ET0 = (0.408 * delta * Rs + gamma * (900/(Tmean+273)) * u2 * (es - ea)) / (delta + gamma * (1 + 0.34*u2))
             et0_list.append(ET0)
-            precip_list.append(data[precip_key][date_str])
+            if precip_key is not None:
+                precip_list.append(data[precip_key][date_str])
+            else:
+                precip_list.append(0)
         
         weather_df = pd.DataFrame({
             "Date": dates,
