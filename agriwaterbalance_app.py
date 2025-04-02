@@ -10,6 +10,21 @@ from shapely.geometry import shape, Point, Polygon
 import datetime
 import requests
 import math
+import time
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# -------------------
+# Configure Requests Session with Retries
+# -------------------
+session = requests.Session()
+retries = Retry(
+    total=3,
+    backoff_factor=0.5,
+    status_forcelist=[500, 502, 503, 504],
+    allowed_methods=["GET"]
+)
+session.mount('https://', HTTPAdapter(max_retries=retries))
 
 # -------------------
 # App Configuration
@@ -20,7 +35,6 @@ st.set_page_config(page_title="AgriWaterBalance", layout="wide")
 # Core Simulation Functions
 # -------------------
 def compute_Ks(depletion, TAW, p):
-    """Compute water stress coefficient (Ks)."""
     RAW = p * TAW
     if depletion <= RAW:
         return 1.0
@@ -30,7 +44,6 @@ def compute_Ks(depletion, TAW, p):
         return (TAW - depletion) / (TAW - RAW)
 
 def compute_Kr(depletion, TEW, REW):
-    """Compute evaporation reduction coefficient (Kr)."""
     if depletion <= REW:
         return 1.0
     elif depletion >= TEW:
@@ -39,11 +52,9 @@ def compute_Kr(depletion, TEW, REW):
         return (TEW - depletion) / (TEW - REW)
 
 def compute_ETc(Kcb, Ks, Kr, Ke, ET0):
-    """Compute crop evapotranspiration (ETc)."""
     return (Kcb * Ks + Kr * Ke) * ET0
 
 def interpolate_crop_stages(crop_df, total_days):
-    """Interpolate crop parameters over simulation days."""
     kcb_list, root_list, p_list, ke_list = [], [], [], []
     for i in range(len(crop_df)):
         row = crop_df.iloc[i]
@@ -69,28 +80,22 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
               use_fao33=False, Ym=0, Ky=0, use_transp=False, WP_yield=0, 
               enable_leaching=False, leaching_method="", nitrate_conc=0, 
               total_N_input=0, leaching_fraction=0):
-    """Run SIMDualKc water balance simulation with yield and leaching options."""
     days = len(weather_df)
     profile_depth = soil_df['Depth_mm'].sum()
     Kcb_list, RD_list, p_list, Ke_list = interpolate_crop_stages(crop_df, days)
-
     TEW, REW = soil_df.iloc[0]['TEW'], soil_df.iloc[0]['REW']
     SW_surface = TEW
     SW_layers = [row['FC'] * row['Depth_mm'] for _, row in soil_df.iterrows()]
-
     cum_ETc = cum_ETa = cum_Irr = cum_P = cum_drain = 0
     stress_days = 0
     cum_transp = 0
     results = []
-
     for i in range(days):
         row = weather_df.iloc[i]
         ET0, P, I = row['ET0'], row['Precipitation'], row['Irrigation']
         Kcb, RD, p, Ke = Kcb_list[i], min(RD_list[i], profile_depth), p_list[i], Ke_list[i]
-
         cum_P += P
         cum_Irr += I
-
         FC_total = WP_total = SW_root = 0.0
         cum_depth = 0.0
         for j, soil in soil_df.iterrows():
@@ -101,7 +106,6 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
             WP_total += soil['WP'] * d
             SW_root += (SW_layers[j] / soil['Depth_mm']) * d
             cum_depth += d
-
         TAW = FC_total - WP_total
         depletion = FC_total - SW_root
         Ks = compute_Ks(depletion, TAW, p)
@@ -114,11 +118,9 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
         cum_transp += ETa_transp
         if Ks < 1.0:
             stress_days += 1
-
         SW_surface += P + I
         excess_surface = max(0, SW_surface - TEW)
         SW_surface = max(0, SW_surface - ETa_evap)
-
         water = excess_surface
         for j, soil in soil_df.iterrows():
             max_SW = soil['FC'] * soil['Depth_mm']
@@ -131,7 +133,6 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
                 transp = ETa_transp * (soil['Depth_mm'] / RD)
                 SW_layers[j] -= transp
                 SW_layers[j] = max(soil['WP'] * soil['Depth_mm'], SW_layers[j])
-
         results.append({
             "Date": row['Date'],
             "ET0 (mm)": ET0,
@@ -153,9 +154,7 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
             "Cumulative_Drainage (mm)": cum_drain,
             "Stress_Days": stress_days
         })
-
     results_df = pd.DataFrame(results)
-
     if enable_yield:
         if use_fao33:
             ETc_total = results_df['ETc (mm)'].sum()
@@ -165,7 +164,6 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
         if use_transp:
             Ya_transp = WP_yield * cum_transp
             results_df['Yield (ton/ha)'] = Ya_transp
-
     if enable_leaching:
         if leaching_method == "Method 1: Drainage × nitrate concentration":
             leaching = cum_drain * nitrate_conc / 1000
@@ -173,14 +171,12 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
         elif leaching_method == "Method 2: Leaching Fraction × total N input":
             leaching = leaching_fraction * total_N_input
             results_df['Leaching (kg/ha)'] = leaching
-
     return results_df
 
 # -------------------
 # Data Fetching Functions
 # -------------------
 def fetch_weather_data(lat, lon, start_date, end_date):
-    """Fetch weather data from NASA POWER API with ET0 calculation."""
     params = {
         "parameters": "T2M_MAX,T2M_MIN,PRECTOT,WS2M,RH2M,ALLSKY_SFC_SW_DWN",
         "community": "AG",
@@ -190,9 +186,8 @@ def fetch_weather_data(lat, lon, start_date, end_date):
         "end": end_date.strftime("%Y%m%d"),
         "format": "JSON"
     }
-    
     try:
-        response = requests.get("https://power.larc.nasa.gov/api/temporal/daily/point", params=params)
+        response = session.get("https://power.larc.nasa.gov/api/temporal/daily/point", params=params)
         response.raise_for_status()
         data = response.json()['properties']['parameter']
         if "PRECTOT" in data:
@@ -201,7 +196,6 @@ def fetch_weather_data(lat, lon, start_date, end_date):
             precip_key = "PRECTOTCORG"
         else:
             precip_key = None
-        
         dates = []
         et0_list = []
         precip_list = []
@@ -225,7 +219,6 @@ def fetch_weather_data(lat, lon, start_date, end_date):
                 precip_list.append(data[precip_key][date_str])
             else:
                 precip_list.append(0)
-        
         weather_df = pd.DataFrame({
             "Date": dates,
             "ET0": et0_list,
@@ -238,56 +231,61 @@ def fetch_weather_data(lat, lon, start_date, end_date):
         return None
 
 def fetch_soil_data(lat, lon):
-    """Fetch soil data from SoilGrids API."""
-    try:
-        url = "https://rest.soilgrids.org/soilgrids/v2.0/properties/query?"
-        params = {
-            'lon': lon,
-            'lat': lat,
-            'property': 'bdod,sand,silt,clay,ocd',
-            'depth': '0-5cm,5-15cm',
-            'value': 'mean'
-        }
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        data = response.json()
-        properties = data['properties']
-        layers = []
-        for depth in ['0-5cm', '5-15cm']:
-            bdod = properties['bdod'][depth]['mean'] / 100
-            sand = properties['sand'][depth]['mean']
-            clay = properties['clay'][depth]['mean']
-            ocd = properties['ocd'][depth]['mean'] / 100
-            FC = (-0.251 * sand/100 + 0.195 * clay/100 + 0.011 * ocd +
-                  0.006 * (sand/100) * ocd - 0.027 * (clay/100) * ocd +
-                  0.452 * (sand/100) * (clay/100) + 0.299) * bdod
-            WP = (-0.024 * sand/100 + 0.487 * clay/100 + 0.006 * ocd +
-                  0.005 * (sand/100) * ocd - 0.013 * (clay/100) * ocd +
-                  0.068 * (sand/100) * (clay/100) + 0.031) * bdod
-            layers.append({
-                "Depth_mm": 50 if depth == '0-5cm' else 100,
-                "FC": FC,
-                "WP": WP,
-                "TEW": 200 if depth == '0-5cm' else 0,
-                "REW": 50 if depth == '0-5cm' else 0
+    max_retries = 3
+    retry_delay = 1  # seconds
+    timeout = 5
+    for attempt in range(max_retries):
+        try:
+            url = "https://rest.isric.org/soilgrids/v2.0/properties/query"
+            params = {
+                'lon': lon,
+                'lat': lat,
+                'property': 'bdod,sand,clay,ocd',
+                'depth': '0-5cm,5-15cm',
+                'value': 'mean'
+            }
+            response = session.get(url, params=params, timeout=timeout,
+                                   headers={'User-Agent': 'AgriWaterBalance/1.0'})
+            response.raise_for_status()
+            data = response.json()
+            properties = data['properties']
+            layers = []
+            for depth in ['0-5cm', '5-15cm']:
+                bdod = properties.get('bdod', {}).get(depth, {}).get('mean', 140) / 100
+                sand = properties.get('sand', {}).get(depth, {}).get('mean', 40)
+                clay = properties.get('clay', {}).get(depth, {}).get('mean', 20)
+                ocd = properties.get('ocd', {}).get(depth, {}).get('mean', 1.0) / 100
+                FC = max(0.1, min(0.4, (-0.251 * sand/100 + 0.195 * clay/100 + 0.011 * ocd +
+                          0.006 * (sand/100) * ocd - 0.027 * (clay/100) * ocd +
+                          0.452 * (sand/100) * (clay/100) + 0.299) * bdod))
+                WP = max(0.01, min(0.2, (-0.024 * sand/100 + 0.487 * clay/100 + 0.006 * ocd +
+                          0.005 * (sand/100) * ocd - 0.013 * (clay/100) * ocd +
+                          0.068 * (sand/100) * (clay/100) + 0.031) * bdod))
+                layers.append({
+                    "Depth_mm": 50 if depth == '0-5cm' else 100,
+                    "FC": FC,
+                    "WP": WP,
+                    "TEW": 200 if depth == '0-5cm' else 0,
+                    "REW": 50 if depth == '0-5cm' else 0
+                })
+            return pd.DataFrame(layers)
+        except (requests.exceptions.RequestException, KeyError) as e:
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay * (attempt + 1))
+                continue
+            st.warning(f"Soil data fetch failed: {str(e)[:200]}... Using default values.")
+            return pd.DataFrame({
+                "Depth_mm": [200, 100],
+                "FC": [0.30, 0.30],
+                "WP": [0.15, 0.15],
+                "TEW": [200, 0],
+                "REW": [50, 0]
             })
-        return pd.DataFrame(layers)
-    except Exception as e:
-        st.warning(f"Soil data fetch failed: {str(e)}. Using default values.")
-        return pd.DataFrame({
-            "Depth_mm": [200, 100],
-            "FC": [0.30, 0.30],
-            "WP": [0.15, 0.15],
-            "TEW": [200, 0],
-            "REW": [50, 0]
-        })
 
 def fetch_ndvi_data(study_area, start_date, end_date):
-    """Fetch NDVI data. Here we return a constant NDVI."""
     return 0.6
 
 def get_crop_data(ndvi, num_days):
-    """Convert NDVI to crop stage data."""
     kcb = 0.1 + 1.1 * ndvi
     crop_df = pd.DataFrame({
         "Start_Day": [1],
@@ -300,7 +298,6 @@ def get_crop_data(ndvi, num_days):
     return crop_df
 
 def create_grid_in_polygon(polygon, spacing=0.01):
-    """Create grid points within a polygon (spacing in km)."""
     gdf = gpd.GeoDataFrame(geometry=[polygon], crs="EPSG:4326")
     utm_crs = gdf.estimate_utm_crs()
     gdf_utm = gdf.to_crs(utm_crs)
@@ -427,7 +424,7 @@ if mode == "Normal Mode":
                 st.error(f"⚠️ Simulation failed: {e}")
     else:
         st.info("📂 Please upload all required files and click 'Run Simulation'.")
-
+        
 # ========= SPATIAL MODE =========
 elif mode == "Spatial Mode":
     st.markdown("### 🌍 Spatial Analysis Mode")
@@ -448,7 +445,8 @@ elif mode == "Spatial Mode":
                 if not shapes:
                     st.error("No polygon drawn.")
                     st.stop()
-                study_area = gpd.GeoSeries(shapes).unary_union
+                # Use union_all() instead of deprecated unary_union
+                study_area = gpd.GeoSeries(shapes).union_all()
                 st.markdown("### Your Field Boundary")
                 st.write(study_area)
                 grid_points = create_grid_in_polygon(study_area, spacing=spacing)
