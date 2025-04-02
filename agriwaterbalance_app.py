@@ -20,8 +20,8 @@ st.set_page_config(page_title="AgriWaterBalance", layout="wide")
 # -------------------
 col1, col2 = st.columns([1, 8])
 with col1:
-    # Replace "logo.png" with your actual logo file or remove this line if no logo is available
-    st.image("logo.png", width=90, use_column_width=True)
+    # Replace "logo.png" with your logo file or remove this line if no logo is available
+    st.image("logo.png", use_container_width=True)  # Updated from use_column_width
 with col2:
     st.title("AgriWaterBalance")
     st.markdown("**A research-grade, multi-layer soil water balance tool for any crop and soil.**")
@@ -30,6 +30,7 @@ with col2:
 # Core Simulation Functions (common to both modes)
 # -------------------
 def compute_Ks(depletion, TAW, p):
+    """Calculate the water stress coefficient (Ks)."""
     RAW = p * TAW
     if depletion <= RAW:
         return 1.0
@@ -39,6 +40,7 @@ def compute_Ks(depletion, TAW, p):
         return (TAW - depletion) / (TAW - RAW)
 
 def compute_Kr(depletion, TEW, REW):
+    """Calculate the evaporation reduction coefficient (Kr)."""
     if depletion <= REW:
         return 1.0
     elif depletion >= TEW:
@@ -47,9 +49,11 @@ def compute_Kr(depletion, TEW, REW):
         return (TEW - depletion) / (TEW - REW)
 
 def compute_ETc(Kcb, Ks, Kr, Ke, ET0):
+    """Calculate crop evapotranspiration (ETc)."""
     return (Kcb * Ks + Kr * Ke) * ET0
 
 def interpolate_crop_stages(crop_df, total_days):
+    """Interpolate crop parameters over the simulation period."""
     kcb_list, root_list, p_list, ke_list = [], [], [], []
     for i in range(len(crop_df)):
         row = crop_df.iloc[i]
@@ -72,6 +76,7 @@ def interpolate_crop_stages(crop_df, total_days):
     return kcb_list[:total_days], root_list[:total_days], p_list[:total_days], ke_list[:total_days]
 
 def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True):
+    """Run the SIMDualKc soil water balance simulation."""
     days = len(weather_df)
     profile_depth = soil_df['Depth_mm'].sum()
     Kcb_list, RD_list, p_list, Ke_list = interpolate_crop_stages(crop_df, days)
@@ -163,14 +168,10 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True):
 # Data Fetching Functions (real online data)
 # -------------------
 def fetch_weather_data(lat, lon, start_date, end_date):
-    """
-    Query NASA POWER API for daily weather data.
-    Returns a DataFrame with Date, ET0 (mm), Precipitation (mm), and Irrigation (set to 0).
-    Note: ET0 is not directly available; this is a placeholder. Calculate it using Penman-Monteith if needed.
-    """
+    """Fetch weather data from NASA POWER API."""
     url = "https://power.larc.nasa.gov/api/temporal/daily/point"
     params = {
-        "parameters": "PRECTOTCORR",  # Corrected precipitation
+        "parameters": "PRECTOTCORR",
         "community": "AG",
         "latitude": lat,
         "longitude": lon,
@@ -189,8 +190,7 @@ def fetch_weather_data(lat, lon, start_date, end_date):
             date_obj = datetime.datetime.strptime(date_str, "%Y%m%d").date()
             dates.append(date_obj)
             precip_list.append(param["PRECTOTCORR"][date_str])
-            # Placeholder for ET0 (not directly available from NASA POWER)
-            et0_list.append(5.0)  # Replace with actual ET0 calculation if needed
+            et0_list.append(5.0)  # Placeholder for ET0
         weather_df = pd.DataFrame({
             "Date": dates,
             "ET0": et0_list,
@@ -199,64 +199,30 @@ def fetch_weather_data(lat, lon, start_date, end_date):
         })
         return weather_df
     except requests.RequestException as e:
-        st.error(f"Error fetching weather data from NASA POWER: {e}")
-        return None
-    except KeyError:
-        st.error("Error parsing weather data from NASA POWER.")
+        st.error(f"Error fetching weather data: {e}")
         return None
 
 def fetch_soil_data(lat, lon):
-    """
-    Query SoilGrids API v2.0 for soil properties at the given point.
-    Returns a DataFrame with a two-layer soil profile.
-    For simplicity, hardcoded values are used here; replace with actual API parsing.
-    """
-    url = "https://rest.isric.org/soilgrids/v2.0/properties/query"
-    params = {
-        "lon": lon,
-        "lat": lat,
-        "property": "clay,sand,silt",
-        "depth": "0-5cm,5-15cm",
-        "value": "mean"
-    }
+    """Fetch soil data from SoilGrids API (hardcoded for simplicity)."""
     try:
-        r = requests.get(url, params=params)
-        r.raise_for_status()
-        # Uncomment and expand the following to parse real SoilGrids data:
-        # data = r.json()
-        # clay_0_5 = data['properties']['layers'][0]['depths'][0]['values']['mean'] / 100  # Convert to fraction
-        # Use pedotransfer functions to estimate FC and WP from clay, sand, silt
-        # For now, use hardcoded values:
         soil_df = pd.DataFrame({
             "Depth_mm": [200, 100],
-            "FC": [0.30, 0.30],  # Field capacity (volumetric water content)
-            "WP": [0.15, 0.15],  # Wilting point
-            "TEW": [200, 0],     # Total evaporable water (mm)
-            "REW": [50, 0]       # Readily evaporable water (mm)
+            "FC": [0.30, 0.30],
+            "WP": [0.15, 0.15],
+            "TEW": [200, 0],
+            "REW": [50, 0]
         })
         return soil_df
-    except requests.RequestException as e:
-        st.error(f"Error fetching soil data from SoilGrids: {e}")
+    except Exception as e:
+        st.error(f"Error fetching soil data: {e}")
         return None
 
 def fetch_ndvi_data(study_area, start_date, end_date):
-    """
-    Placeholder for NDVI data fetching (e.g., via Google Earth Engine or Copernicus).
-    Returns a constant NDVI value for demonstration.
-    """
-    # In a real application, integrate with GEE:
-    # import ee
-    # ee.Initialize()
-    # geometry = ee.Geometry.Polygon(list(study_area.exterior.coords))
-    # sentinel = ee.ImageCollection('COPERNICUS/S2').filterBounds(geometry).filterDate(start_date, end_date)
-    # ndvi = sentinel.map(lambda img: img.normalizedDifference(['B8', 'B4'])).mean().getInfo()
-    return 0.6  # Constant value for now
+    """Placeholder for NDVI data fetching."""
+    return 0.6  # Constant value for demonstration
 
 def get_crop_data(ndvi, num_days):
-    """
-    Convert NDVI to a basal crop coefficient (Kcb) using a simple relationship.
-    Returns a crop stage DataFrame covering the simulation period.
-    """
+    """Generate crop data based on NDVI."""
     kcb = 0.1 + 1.1 * ndvi
     crop_df = pd.DataFrame({
         "Start_Day": [1],
@@ -271,7 +237,8 @@ def get_crop_data(ndvi, num_days):
 # -------------------
 # Helper: Create a grid of points within a polygon
 # -------------------
-def create_grid_in_polygon(polygon, spacing=0.1):
+def create_grid_in_polygon(polygon, spacing=0.001):
+    """Generate a grid of points within a polygon."""
     minx, miny, maxx, maxy = polygon.bounds
     xs = np.arange(minx, maxx, spacing)
     ys = np.arange(miny, maxy, spacing)
@@ -302,31 +269,6 @@ if mode == "Normal Mode":
         show_monthly_summary = st.checkbox("Show Monthly Summary", value=True)
         track_drainage = st.checkbox("Track Drainage", value=True)
 
-        st.header("Yield Estimation")
-        enable_yield = st.checkbox("Enable Yield Estimation", value=False)
-        if enable_yield:
-            st.subheader("Select Methods")
-            use_fao33 = st.checkbox("Use FAO-33 Ky-based method", value=True)
-            use_transp = st.checkbox("Use Transpiration-based method", value=False)
-            if use_fao33:
-                Ym = st.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1)
-                Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
-            if use_transp:
-                WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
-
-        st.header("Leaching Estimation")
-        enable_leaching = st.checkbox("Enable Leaching Estimation", value=False)
-        if enable_leaching:
-            leaching_method = st.radio("Select Leaching Method", [
-                "Method 1: Drainage × nitrate concentration",
-                "Method 2: Leaching Fraction × total N input"
-            ])
-            if leaching_method == "Method 1: Drainage × nitrate concentration":
-                nitrate_conc = st.number_input("Nitrate Concentration (mg/L)", min_value=0.0, value=10.0, step=0.1)
-            elif leaching_method == "Method 2: Leaching Fraction × total N input":
-                total_N_input = st.number_input("Total N Input (kg/ha)", min_value=0.0, value=100.0, step=1.0)
-                leaching_fraction = st.number_input("Leaching Fraction (0-1)", min_value=0.0, max_value=1.0, value=0.1, step=0.01)
-
         run_button = st.button("🚀 Run Simulation")
 
     if run_button and weather_file and crop_file and soil_file:
@@ -335,18 +277,14 @@ if mode == "Normal Mode":
             crop_df = pd.read_csv(crop_file)
             soil_df = pd.read_csv(soil_file)
 
-            if enable_leaching and leaching_method == "Method 1: Drainage × nitrate concentration":
-                track_drainage = True
-                st.sidebar.info("ℹ️ Drainage tracking enabled for leaching estimation.")
-
             results_df = SIMdualKc(weather_df, crop_df, soil_df, track_drainage)
             results_df['SWC (%)'] = (results_df['SW_root (mm)'] / results_df['Root_Depth (mm)']) * 100
 
-            tab1, tab2, tab3, tab4 = st.tabs(["📄 Daily Results", "📈 ET Graphs", "💧 Storage", "🌾 Yield and Leaching"])
+            tab1, tab2, tab3 = st.tabs(["📄 Daily Results", "📈 ET Graphs", "💧 Storage"])
             with tab1:
                 st.dataframe(results_df)
                 csv = results_df.to_csv(index=False)
-                st.download_button("📥 Download Results (.txt)", csv, file_name="agriwaterbalance_results.txt")
+                st.download_button("📥 Download Results (.txt)", csv, file_name="results.txt")
             with tab2:
                 fig, ax = plt.subplots()
                 ax.plot(results_df['Date'], results_df['ETa_transp (mm)'], label='Transpiration')
@@ -363,8 +301,6 @@ if mode == "Normal Mode":
                 ax2.legend()
                 ax2.grid(True)
                 st.pyplot(fig2)
-            with tab4:
-                st.write("Yield and leaching calculations can be integrated here.")
             if show_monthly_summary:
                 st.subheader("📆 Monthly Summary")
                 monthly = results_df.copy()
@@ -382,45 +318,41 @@ if mode == "Normal Mode":
         except Exception as e:
             st.error(f"⚠️ Simulation failed: {e}")
     else:
-        st.info("📂 Please upload all required files and click 'Run Simulation' to begin.")
+        st.info("📂 Please upload all required files and click 'Run Simulation'.")
 
 # =========================================
-# SPATIAL MODE (Use drawn polygon to fetch online data and run grid-based simulation)
+# SPATIAL MODE (Use drawn polygon for online data)
 # =========================================
 elif mode == "Spatial Mode":
     st.markdown("### 🌍 Spatial Mode Activated")
-    st.info("Draw your field boundary below. The app will then download online data for your field and simulate the water balance on a grid, displaying spatial maps of outputs.")
+    st.info("Draw your field boundary below to fetch online data and run a grid-based simulation.")
 
-    # Step 1: Let the user draw a polygon (field boundary) on an interactive Folium map
-    default_center = [36.7783, -119.4179]  # Central California as default
+    # Interactive Folium map for drawing
+    default_center = [36.7783, -119.4179]  # Central California
     m = folium.Map(location=default_center, zoom_start=7, tiles="Esri.WorldImagery")
     draw = Draw(export=True)
     draw.add_to(m)
     st.info("Use the drawing tool to delineate your field (polygon).")
     map_data = st_folium(m, key="map", width=700, height=500)
 
-    # Step 2: Extract the drawn polygon(s)
+    # Extract drawn polygon
     study_area = None
     if map_data and map_data.get("all_drawings"):
         drawings = map_data["all_drawings"]
         if drawings:
-            shapes = []
-            for drawing in drawings:
-                geom = drawing.get("geometry")
-                if geom:
-                    shapes.append(shape(geom))
+            shapes = [shape(drawing.get("geometry")) for drawing in drawings if drawing.get("geometry")]
             if shapes:
                 study_area = gpd.GeoDataFrame(geometry=shapes, crs="EPSG:4326")
-                unified = study_area.unary_union
+                unified = study_area.union_all()
                 st.write("### Your Field Boundary")
                 st.write(unified)
 
     if study_area is not None:
-        unified_polygon = study_area.unary_union
-        spacing = st.number_input("Grid spacing (degrees)", min_value=0.01, max_value=0.5, value=0.1, step=0.01)
+        unified_polygon = study_area.union_all()
+        spacing = st.number_input("Grid spacing (degrees)", min_value=0.0001, max_value=0.5, value=0.001, step=0.0001)
         grid_points = create_grid_in_polygon(unified_polygon, spacing=spacing)
         if not grid_points:
-            st.error("No grid points generated. Try a smaller grid spacing or check your polygon.")
+            st.error("No grid points generated. Try a smaller grid spacing.")
         else:
             st.write(f"Generated {len(grid_points)} sample points within the field.")
             grid_gdf = gpd.GeoDataFrame(geometry=grid_points, crs="EPSG:4326")
@@ -451,7 +383,7 @@ elif mode == "Spatial Mode":
                             results_list.append({"lat": lat_pt, "lon": lon_pt, "SW_surface": final_SW})
 
                     if not results_list:
-                        st.error("No simulation results were generated for the grid.")
+                        st.error("No simulation results generated.")
                     else:
                         spatial_results = pd.DataFrame(results_list)
                         spatial_gdf = gpd.GeoDataFrame(
@@ -477,4 +409,4 @@ elif mode == "Spatial Mode":
                 except Exception as e:
                     st.error(f"⚠️ Spatial simulation failed: {e}")
     else:
-        st.info("Please draw your field boundary on the map above to run the spatial simulation.")
+        st.info("Please draw your field boundary on the map to proceed.")
