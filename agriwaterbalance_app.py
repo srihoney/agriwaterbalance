@@ -199,8 +199,17 @@ def fetch_weather_data(lat, lon, start_date, end_date):
         response.raise_for_status()
         data = response.json()['properties']['parameter']
         
+        # Check for precipitation key; if not found, try alternate key
+        if "PRECTOT" in data:
+            precip_key = "PRECTOT"
+        elif "PRECTOTCORG" in data:
+            precip_key = "PRECTOTCORG"
+        else:
+            raise KeyError("Precipitation parameter not found in response.")
+        
         dates = []
         et0_list = []
+        precip_list = []
         for date_str in data['T2M_MAX']:
             dt = datetime.datetime.strptime(date_str, "%Y%m%d")
             dates.append(dt)
@@ -211,19 +220,20 @@ def fetch_weather_data(lat, lon, start_date, end_date):
             u2 = data['WS2M'][date_str]               # m/s
             RH = data['RH2M'][date_str]               # %
             
-            # ET0 calculation using FAO-56 Penman-Monteith (simplified)
+            # Simplified ET0 calculation using FAO-56 Penman-Monteith
             delta = 4098 * (0.6108 * math.exp((17.27 * Tmean)/(Tmean + 237.3))) / (Tmean + 237.3)**2
-            P = 101.3  # Simplified atmospheric pressure (kPa)
+            P = 101.3  # kPa
             gamma = 0.000665 * P
             es = (0.6108 * math.exp(17.27 * Tmax/(Tmax + 237.3)) + 0.6108 * math.exp(17.27 * Tmin/(Tmin + 237.3))) / 2
             ea = es * RH / 100
-            ET0 = (0.408 * delta * (Rs) + gamma * (900/(Tmean+273)) * u2 * (es - ea)) / (delta + gamma * (1 + 0.34*u2))
+            ET0 = (0.408 * delta * Rs + gamma * (900/(Tmean+273)) * u2 * (es - ea)) / (delta + gamma * (1 + 0.34*u2))
             et0_list.append(ET0)
+            precip_list.append(data[precip_key][date_str])
         
         weather_df = pd.DataFrame({
             "Date": dates,
             "ET0": et0_list,
-            "Precipitation": [data['PRECTOT'][d] for d in data['PRECTOT']],
+            "Precipitation": precip_list,
             "Irrigation": [0] * len(dates)
         })
         return weather_df
@@ -253,7 +263,7 @@ def fetch_soil_data(lat, lon):
             sand = properties['sand'][depth]['mean']
             clay = properties['clay'][depth]['mean']
             ocd = properties['ocd'][depth]['mean'] / 100
-            # Simplified calculation for FC and WP (replace with robust method as needed)
+            # Simplified calculation for FC and WP
             FC = (-0.251 * sand/100 + 0.195 * clay/100 + 0.011 * ocd +
                   0.006 * (sand/100) * ocd - 0.027 * (clay/100) * ocd +
                   0.452 * (sand/100) * (clay/100) + 0.299) * bdod
