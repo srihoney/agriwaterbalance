@@ -198,7 +198,7 @@ def fetch_weather_data(lat, lon, start_date, end_date):
         response.raise_for_status()
         data = response.json()['properties']['parameter']
         
-        # Determine precipitation key; if missing, default to 0
+        # Determine precipitation key; if missing, use default value 0 for each day
         if "PRECTOT" in data:
             precip_key = "PRECTOT"
         elif "PRECTOTCORG" in data:
@@ -380,7 +380,6 @@ if mode == "Normal Mode":
                 total_N_input = st.number_input("Total N Input (kg/ha)", min_value=0.0, value=100.0, step=1.0)
                 leaching_fraction = st.number_input("Leaching Fraction (0-1)", min_value=0.0, max_value=1.0, value=0.1, step=0.01)
         run_button = st.button("🚀 Run Simulation")
-
     if run_button and weather_file and crop_file and soil_file:
         with st.spinner("Running simulation..."):
             try:
@@ -449,7 +448,7 @@ if mode == "Normal Mode":
                 st.error(f"⚠️ Simulation failed: {e}")
     else:
         st.info("📂 Please upload all required files and click 'Run Simulation'.")
-
+        
 # ========= SPATIAL MODE =========
 elif mode == "Spatial Mode":
     st.markdown("### 🌍 Spatial Analysis Mode")
@@ -521,14 +520,14 @@ elif mode == "Spatial Mode":
                             zoom_start=10,
                             tiles="CartoDB positron"
                         )
-                        # Force conversion of heatmap data to list of lists of floats
+                        # Prepare heatmap data as list of lists of floats
                         heat_data = [[float(r[0]), float(r[1]), float(r[2])] 
                                      for r in results_df[['lat', 'lon', 'SW_root (mm)']].values.tolist()]
+                        # Remove custom gradient to avoid error
                         HeatMap(
                             data=heat_data,
                             radius=12,
-                            blur=20,
-                            gradient={0.4: 'blue', 0.6: 'lime', 1.0: 'red'}
+                            blur=20
                         ).add_to(m_results)
                         for idx, row in results_df.iterrows():
                             folium.CircleMarker(
