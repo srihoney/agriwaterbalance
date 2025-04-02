@@ -298,6 +298,8 @@ def create_grid_in_polygon(polygon, spacing=0.01):
                 grid_points.append(point)
     return grid_points
 
+# ... [Keep all previous imports and functions unchanged] ...
+
 # -------------------
 # User Interface
 # -------------------
@@ -308,8 +310,113 @@ st.markdown("**Spatiotemporal Soil Water Balance Modeling**")
 mode = st.radio("Operation Mode:", ["Normal Mode", "Spatial Mode"], horizontal=True)
 
 if mode == "Normal Mode":
-    # [Keep original Normal Mode implementation here]
-    # (Same as in user's original code)
+    with st.sidebar:
+        st.header("Upload Input Files (.txt)")
+        weather_file = st.file_uploader("Weather Data (.txt)", type="txt")
+        crop_file = st.file_uploader("Crop Stage Data (.txt)", type="txt")
+        soil_file = st.file_uploader("Soil Layers (.txt)", type="txt")
+
+        st.header("Options")
+        show_monthly_summary = st.checkbox("Show Monthly Summary", value=True)
+        track_drainage = st.checkbox("Track Drainage", value=True)
+
+        st.header("Yield Estimation")
+        enable_yield = st.checkbox("Enable Yield Estimation", value=False)
+        if enable_yield:
+            st.subheader("Select Methods")
+            use_fao33 = st.checkbox("Use FAO-33 Ky-based method", value=True)
+            use_transp = st.checkbox("Use Transpiration-based method", value=False)
+            if use_fao33:
+                Ym = st.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1)
+                Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
+            if use_transp:
+                WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
+
+        st.header("Leaching Estimation")
+        enable_leaching = st.checkbox("Enable Leaching Estimation", value=False)
+        if enable_leaching:
+            leaching_method = st.radio("Select Leaching Method", [
+                "Method 1: Drainage × nitrate concentration",
+                "Method 2: Leaching Fraction × total N input"
+            ])
+            if leaching_method == "Method 1: Drainage × nitrate concentration":
+                nitrate_conc = st.number_input("Nitrate Concentration (mg/L)", min_value=0.0, value=10.0, step=0.1)
+            elif leaching_method == "Method 2: Leaching Fraction × total N input":
+                total_N_input = st.number_input("Total N Input (kg/ha)", min_value=0.0, value=100.0, step=1.0)
+                leaching_fraction = st.number_input("Leaching Fraction (0-1)", min_value=0.0, max_value=1.0, value=0.1, step=0.01)
+
+        run_button = st.button("🚀 Run Simulation")
+
+    if run_button and weather_file and crop_file and soil_file:
+        with st.spinner("Running simulation..."):
+            try:
+                weather_df = pd.read_csv(weather_file, parse_dates=['Date'])
+                crop_df = pd.read_csv(crop_file)
+                soil_df = pd.read_csv(soil_file)
+
+                results_df = SIMdualKc(
+                    weather_df, crop_df, soil_df, track_drainage,
+                    enable_yield=enable_yield,
+                    use_fao33=use_fao33,
+                    Ym=Ym if 'Ym' in locals() else 0,
+                    Ky=Ky if 'Ky' in locals() else 0,
+                    use_transp=use_transp,
+                    WP_yield=WP_yield if 'WP_yield' in locals() else 0,
+                    enable_leaching=enable_leaching,
+                    leaching_method=leaching_method,
+                    nitrate_conc=nitrate_conc,
+                    total_N_input=total_N_input,
+                    leaching_fraction=leaching_fraction
+                )
+                results_df['SWC (%)'] = (results_df['SW_root (mm)'] / results_df['Root_Depth (mm)']) * 100
+
+                st.success("Simulation completed successfully!")
+                tab1, tab2, tab3, tab4 = st.tabs(["📄 Daily Results", "📈 ET Graphs", "💧 Storage", "🌾 Yield and Leaching"])
+                with tab1:
+                    st.dataframe(results_df)
+                    csv = results_df.to_csv(index=False)
+                    st.download_button("📥 Download Results (.txt)", csv, file_name="results.txt")
+                with tab2:
+                    fig, ax = plt.subplots()
+                    ax.plot(results_df['Date'], results_df['ETa_transp (mm)'], label='Transpiration')
+                    ax.plot(results_df['Date'], results_df['ETa_evap (mm)'], label='Evaporation')
+                    ax.plot(results_df['Date'], results_df['ETc (mm)'], label='ETc')
+                    ax.set_ylabel("ET (mm)")
+                    ax.legend()
+                    ax.grid(True)
+                    st.pyplot(fig)
+                with tab3:
+                    fig2, ax2 = plt.subplots()
+                    ax2.plot(results_df['Date'], results_df['SW_root (mm)'], label='Root Zone SW')
+                    ax2.set_ylabel("Soil Water (mm)")
+                    ax2.legend()
+                    ax2.grid(True)
+                    st.pyplot(fig2)
+                with tab4:
+                    if enable_yield and 'Yield (ton/ha)' in results_df.columns:
+                        st.write("### Yield Estimation")
+                        st.write(results_df[['Date', 'Yield (ton/ha)']])
+                    if enable_leaching and 'Leaching (kg/ha)' in results_df.columns:
+                        st.write("### Leaching Estimation")
+                        st.write(results_df[['Date', 'Leaching (kg/ha)']])
+                if show_monthly_summary:
+                    st.subheader("📆 Monthly Summary")
+                    monthly = results_df.copy()
+                    monthly['Month'] = monthly['Date'].dt.to_period('M')
+                    summary = monthly.groupby('Month').agg({
+                        'ET0 (mm)': 'mean',
+                        'ETc (mm)': 'mean',
+                        'ETa_transp (mm)': 'mean',
+                        'ETa_evap (mm)': 'mean',
+                        'Cumulative_Irrigation (mm)': 'max',
+                        'Cumulative_Precip (mm)': 'max',
+                        'Stress_Days': 'max'
+                    }).reset_index()
+                    st.dataframe(summary)
+            except Exception as e:
+                st.error(f"⚠️ Simulation failed: {e}")
+    else:
+        st.info("📂 Please upload all required files and click 'Run Simulation'.")
 
 elif mode == "Spatial Mode":
     st.markdown("### 🌍 Spatial Analysis Mode")
@@ -336,16 +443,23 @@ elif mode == "Spatial Mode":
                     # Create grid points
                     grid_points = create_grid_in_polygon(study_area, spacing/111)
                     
+                    if not grid_points:
+                        st.warning("No grid points generated! Check your polygon and spacing.")
+                        st.stop()
+                    
                     # Run simulation for each point
                     results = []
                     progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
                     for i, point in enumerate(grid_points):
                         lat, lon = point.y, point.x
+                        status_text.text(f"Processing point {i+1}/{len(grid_points)} ({lat:.4f}, {lon:.4f})")
                         
                         # Fetch spatial inputs
                         weather = fetch_weather_data(lat, lon, start_date, end_date)
                         soil = fetch_soil_data(lat, lon)
-                        crop = pd.DataFrame({  # Simplified crop parameterization
+                        crop = pd.DataFrame({
                             "Start_Day": [1],
                             "End_Day": [len(weather)],
                             "Kcb": [1.0],
@@ -354,37 +468,93 @@ elif mode == "Spatial Mode":
                             "Ke": [0.8]
                         })
                         
-                        # Run water balance model
+                        # Run model
                         if weather is not None and soil is not None:
                             result = SIMdualKc(weather, crop, soil)
                             final_sw = result.iloc[-1]["SW_root (mm)"]
-                            results.append({"lat": lat, "lon": lon, "SW_root": final_sw})
+                            results.append({
+                                "lat": lat,
+                                "lon": lon,
+                                "SW_root (mm)": final_sw,
+                                "Mean_ETa (mm/day)": result["ETa_transp (mm)"].mean()
+                            })
                         
                         progress_bar.progress((i+1)/len(grid_points))
                     
-                    # Visualize results
                     if results:
                         results_df = pd.DataFrame(results)
-                        st.markdown("### Spatial Results")
                         
-                        # Heatmap visualization
-                        m_results = folium.Map(location=[results_df.lat.mean(), results_df.lon.mean()], zoom_start=10)
-                        HeatMap(results_df[['lat', 'lon', 'SW_root']].values.tolist(), radius=10).add_to(m_results)
-                        st_folium(m_results, width=800, height=500)
+                        # Display Results Section
+                        st.markdown("## 📊 Spatial Results")
                         
-                        # Data export
-                        st.download_button(
-                            "💾 Download Spatial Results",
-                            results_df.to_csv(index=False),
-                            file_name="spatial_water_balance.csv"
-                        )
+                        # Tabbed Interface
+                        tab1, tab2, tab3 = st.tabs(["Map Visualization", "Data Table", "Export Data"])
+                        
+                        with tab1:
+                            st.markdown("### Spatial Distribution Map")
+                            m_results = folium.Map(
+                                location=[results_df.lat.mean(), results_df.lon.mean()], 
+                                zoom_start=10,
+                                tiles="CartoDB positron"
+                            )
+                            
+                            # Add heatmap
+                            HeatMap(
+                                data=results_df[['lat', 'lon', 'SW_root (mm)']].values.tolist(),
+                                radius=12,
+                                blur=20,
+                                gradient={0.4: 'blue', 0.6: 'lime', 1: 'red'}
+                            ).add_to(m_results)
+                            
+                            # Add markers with popups
+                            for idx, row in results_df.iterrows():
+                                folium.CircleMarker(
+                                    location=[row['lat'], row['lon']],
+                                    radius=3,
+                                    popup=f"SW: {row['SW_root (mm)']:.1f} mm<br>ETa: {row['Mean_ETa (mm/day)']:.1f mm/day",
+                                    color='#3186cc',
+                                    fill=True
+                                ).add_to(m_results)
+                            
+                            st_folium(m_results, width=800, height=500)
+                        
+                        with tab2:
+                            st.markdown("### Raw Results Data")
+                            st.dataframe(
+                                results_df.sort_values("SW_root (mm)", ascending=False),
+                                height=400,
+                                use_container_width=True
+                            )
+                        
+                        with tab3:
+                            st.markdown("### Export Options")
+                            
+                            # CSV Export
+                            csv = results_df.to_csv(index=False)
+                            st.download_button(
+                                label="📥 Download CSV",
+                                data=csv,
+                                file_name="spatial_water_balance.csv",
+                                mime="text/csv"
+                            )
+                            
+                            # GeoJSON Export
+                            gdf = gpd.GeoDataFrame(
+                                results_df,
+                                geometry=gpd.points_from_xy(results_df.lon, results_df.lat),
+                                crs="EPSG:4326"
+                            )
+                            geojson = gdf.to_json()
+                            st.download_button(
+                                label="🌐 Download GeoJSON",
+                                data=geojson,
+                                file_name="spatial_results.geojson",
+                                mime="application/json"
+                            )
+                    else:
+                        st.warning("No results generated! Check input data sources.")
+                        
                 except Exception as e:
                     st.error(f"Spatial analysis failed: {str(e)}")
             else:
                 st.warning("Please draw a polygon on the map first!")
-
-# -------------------
-# Footer
-# -------------------
-st.markdown("---")
-st.markdown("*Developed by Srinivasa Rao Peddinti* | *Model: Soil water balance web tool*")
