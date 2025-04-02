@@ -25,6 +25,7 @@ st.markdown("**A research-grade, multi-layer soil water balance tool for any cro
 # Core Simulation Functions
 # -------------------
 def compute_Ks(depletion, TAW, p):
+    """Compute water stress coefficient (Ks)."""
     RAW = p * TAW
     if depletion <= RAW:
         return 1.0
@@ -34,6 +35,7 @@ def compute_Ks(depletion, TAW, p):
         return (TAW - depletion) / (TAW - RAW)
 
 def compute_Kr(depletion, TEW, REW):
+    """Compute evaporation reduction coefficient (Kr)."""
     if depletion <= REW:
         return 1.0
     elif depletion >= TEW:
@@ -42,9 +44,11 @@ def compute_Kr(depletion, TEW, REW):
         return (TEW - depletion) / (TEW - REW)
 
 def compute_ETc(Kcb, Ks, Kr, Ke, ET0):
+    """Compute crop evapotranspiration (ETc)."""
     return (Kcb * Ks + Kr * Ke) * ET0
 
 def interpolate_crop_stages(crop_df, total_days):
+    """Interpolate crop parameters over simulation days."""
     kcb_list, root_list, p_list, ke_list = [], [], [], []
     for i in range(len(crop_df)):
         row = crop_df.iloc[i]
@@ -66,7 +70,11 @@ def interpolate_crop_stages(crop_df, total_days):
             ke_list.append(ke)
     return kcb_list[:total_days], root_list[:total_days], p_list[:total_days], ke_list[:total_days]
 
-def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False, Ym=0, Ky=0, WP_yield=0, enable_leaching=False, leaching_method="", nitrate_conc=0, total_N_input=0, leaching_fraction=0):
+def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False, 
+              use_fao33=False, Ym=0, Ky=0, use_transp=False, WP_yield=0, 
+              enable_leaching=False, leaching_method="", nitrate_conc=0, 
+              total_N_input=0, leaching_fraction=0):
+    """Run SIMDualKc water balance simulation with yield and leaching options."""
     days = len(weather_df)
     profile_depth = soil_df['Depth_mm'].sum()
     Kcb_list, RD_list, p_list, Ke_list = interpolate_crop_stages(crop_df, days)
@@ -153,19 +161,21 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
 
     results_df = pd.DataFrame(results)
 
+    # Yield calculations
     if enable_yield:
-        if 'use_fao33' in st.session_state and st.session_state.use_fao33:
+        if use_fao33:
             ETc_total = results_df['ETc (mm)'].sum()
             ETa_total = results_df['ETa_transp (mm)'].sum() + results_df['ETa_evap (mm)'].sum()
             Ya = Ym * (1 - Ky * (1 - ETa_total / ETc_total))
             results_df['Yield (ton/ha)'] = Ya
-        if 'use_transp' in st.session_state and st.session_state.use_transp:
-            Ya = WP_yield * cum_transp
-            results_df['Yield (ton/ha)'] = Ya
+        if use_transp:
+            Ya_transp = WP_yield * cum_transp
+            results_df['Yield (ton/ha)'] = Ya_transp
 
+    # Leaching calculations
     if enable_leaching:
         if leaching_method == "Method 1: Drainage × nitrate concentration":
-            leaching = cum_drain * nitrate_conc / 1000
+            leaching = cum_drain * nitrate_conc / 1000  # Convert mg/L to kg/ha
             results_df['Leaching (kg/ha)'] = leaching
         elif leaching_method == "Method 2: Leaching Fraction × total N input":
             leaching = leaching_fraction * total_N_input
@@ -177,6 +187,7 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
 # Data Fetching Functions
 # -------------------
 def fetch_weather_data(lat, lon, start_date, end_date):
+    """Fetch weather data from NASA POWER API."""
     url = "https://power.larc.nasa.gov/api/temporal/daily/point"
     params = {
         "parameters": "PRECTOTCORR",
@@ -197,7 +208,7 @@ def fetch_weather_data(lat, lon, start_date, end_date):
             date_obj = datetime.datetime.strptime(date_str, "%Y%m%d").date()
             dates.append(date_obj)
             precip_list.append(param["PRECTOTCORR"][date_str])
-            et0_list.append(5.0)  # Placeholder ET0
+            et0_list.append(5.0)  # Placeholder for ET0
         weather_df = pd.DataFrame({
             "Date": dates,
             "ET0": et0_list,
@@ -205,28 +216,27 @@ def fetch_weather_data(lat, lon, start_date, end_date):
             "Irrigation": [0] * len(dates)
         })
         return weather_df
-    except requests.RequestException as e:
-        st.error(f"Error fetching weather data: {e}")
+    except Exception as e:
+        st.warning(f"Failed to fetch weather data for lat={lat}, lon={lon}: {e}")
         return None
 
 def fetch_soil_data(lat, lon):
-    try:
-        soil_df = pd.DataFrame({
-            "Depth_mm": [200, 100],
-            "FC": [0.30, 0.30],
-            "WP": [0.15, 0.15],
-            "TEW": [200, 0],
-            "REW": [50, 0]
-        })
-        return soil_df
-    except Exception as e:
-        st.error(f"Error fetching soil data: {e}")
-        return None
+    """Fetch hardcoded soil data (placeholder)."""
+    soil_df = pd.DataFrame({
+        "Depth_mm": [200, 100],
+        "FC": [0.30, 0.30],
+        "WP": [0.15, 0.15],
+        "TEW": [200, 0],
+        "REW": [50, 0]
+    })
+    return soil_df
 
 def fetch_ndvi_data(study_area, start_date, end_date):
-    return 0.6  # Placeholder NDVI
+    """Fetch placeholder NDVI value."""
+    return 0.6
 
 def get_crop_data(ndvi, num_days):
+    """Generate crop data based on NDVI."""
     kcb = 0.1 + 1.1 * ndvi
     crop_df = pd.DataFrame({
         "Start_Day": [1],
@@ -242,6 +252,7 @@ def get_crop_data(ndvi, num_days):
 # Helper: Create Grid Points
 # -------------------
 def create_grid_in_polygon(polygon, spacing=0.001):
+    """Create grid points within a polygon."""
     minx, miny, maxx, maxy = polygon.bounds
     xs = np.arange(minx, maxx, spacing)
     ys = np.arange(miny, maxy, spacing)
@@ -278,8 +289,6 @@ if mode == "Normal Mode":
                 Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
             if use_transp:
                 WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
-            st.session_state.use_fao33 = use_fao33
-            st.session_state.use_transp = use_transp
 
         st.header("Leaching Estimation")
         enable_leaching = st.checkbox("Enable Leaching Estimation", value=False)
@@ -305,8 +314,17 @@ if mode == "Normal Mode":
 
                 results_df = SIMdualKc(
                     weather_df, crop_df, soil_df, track_drainage,
-                    enable_yield=enable_yield, Ym=Ym if 'Ym' in locals() else 0, Ky=Ky if 'Ky' in locals() else 0, WP_yield=WP_yield if 'WP_yield' in locals() else 0,
-                    enable_leaching=enable_leaching, leaching_method=leaching_method if 'leaching_method' in locals() else "", nitrate_conc=nitrate_conc if 'nitrate_conc' in locals() else 0, total_N_input=total_N_input if 'total_N_input' in locals() else 0, leaching_fraction=leaching_fraction if 'leaching_fraction' in locals() else 0
+                    enable_yield=enable_yield,
+                    use_fao33=use_fao33 if 'use_fao33' in locals() else False,
+                    Ym=Ym if 'Ym' in locals() else 0,
+                    Ky=Ky if 'Ky' in locals() else 0,
+                    use_transp=use_transp if 'use_transp' in locals() else False,
+                    WP_yield=WP_yield if 'WP_yield' in locals() else 0,
+                    enable_leaching=enable_leaching,
+                    leaching_method=leaching_method if 'leaching_method' in locals() else "",
+                    nitrate_conc=nitrate_conc if 'nitrate_conc' in locals() else 0,
+                    total_N_input=total_N_input if 'total_N_input' in locals() else 0,
+                    leaching_fraction=leaching_fraction if 'leaching_fraction' in locals() else 0
                 )
                 results_df['SWC (%)'] = (results_df['SW_root (mm)'] / results_df['Root_Depth (mm)']) * 100
 
@@ -333,12 +351,12 @@ if mode == "Normal Mode":
                     ax2.grid(True)
                     st.pyplot(fig2)
                 with tab4:
-                    if enable_yield:
+                    if enable_yield and 'Yield (ton/ha)' in results_df.columns:
                         st.write("### Yield Estimation")
-                        st.write(results_df[['Date', 'Yield (ton/ha)']].iloc[-1:])
-                    if enable_leaching:
+                        st.write(results_df[['Date', 'Yield (ton/ha)']])
+                    if enable_leaching and 'Leaching (kg/ha)' in results_df.columns:
                         st.write("### Leaching Estimation")
-                        st.write(results_df[['Date', 'Leaching (kg/ha)']].iloc[-1:])
+                        st.write(results_df[['Date', 'Leaching (kg/ha)']])
                 if show_monthly_summary:
                     st.subheader("📆 Monthly Summary")
                     monthly = results_df.copy()
@@ -365,7 +383,11 @@ elif mode == "Spatial Mode":
     st.markdown("### 🌍 Spatial Mode Activated")
     st.info("Draw your field boundary below. The app will fetch online data and simulate the water balance on a grid.")
 
-    default_center = [36.7783, -119.4179]
+    # Explanation of data sources
+    st.markdown("### About Spatial Mode")
+    st.write("In Spatial Mode, the app fetches weather data from NASA POWER API, uses hardcoded soil data, and a placeholder NDVI value to simulate soil water balance for each grid point within your drawn polygon.")
+
+    default_center = [36.7783, -119.4179]  # Central California as default
     m = folium.Map(location=default_center, zoom_start=7, tiles="Esri.WorldImagery")
     Draw(export=True).add_to(m)
     st.info("Use the drawing tool to delineate your field (polygon).")
@@ -397,7 +419,7 @@ elif mode == "Spatial Mode":
 
             st.subheader("Run Spatial Simulation")
             if st.button("Run Spatial Simulation"):
-                with st.spinner("Fetching data and running simulation..."):
+                with st.spinner("Running simulation..."):
                     try:
                         end_date = datetime.date.today()
                         start_date = end_date - datetime.timedelta(days=29)
@@ -407,21 +429,22 @@ elif mode == "Spatial Mode":
                         for i, pt in enumerate(grid_points):
                             lat_pt = pt.y
                             lon_pt = pt.x
+                            st.write(f"Processing point {i+1}/{total_points}: Lat {lat_pt:.4f}, Lon {lon_pt:.4f}")
                             weather_df = fetch_weather_data(lat_pt, lon_pt, start_date, end_date)
                             if weather_df is None:
+                                st.warning(f"Skipping point {i+1} due to weather data fetch failure.")
                                 continue
                             soil_df = fetch_soil_data(lat_pt, lon_pt)
-                            if soil_df is None:
-                                continue
                             ndvi = fetch_ndvi_data(unified_polygon, start_date, end_date)
                             crop_df = get_crop_data(ndvi, len(weather_df))
                             sim_df = SIMdualKc(weather_df, crop_df, soil_df, track_drain=True)
                             final_SW = sim_df.iloc[-1]["SW_surface (mm)"]
                             results_list.append({"lat": lat_pt, "lon": lon_pt, "SW_surface": final_SW})
                             progress_bar.progress((i + 1) / total_points)
+                            st.write(f"Point {i+1} processed successfully. SW_surface: {final_SW:.1f} mm")
 
                         if not results_list:
-                            st.error("No simulation results generated. Check data availability for the points.")
+                            st.error("No simulation results were generated. Please check if data is available for the selected area.")
                         else:
                             spatial_results = pd.DataFrame(results_list)
                             spatial_gdf = gpd.GeoDataFrame(
