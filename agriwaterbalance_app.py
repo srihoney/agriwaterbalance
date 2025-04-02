@@ -9,7 +9,6 @@ from streamlit_folium import st_folium
 from shapely.geometry import shape, Point, Polygon
 import datetime
 import requests
-from io import BytesIO
 import math
 
 # -------------------
@@ -199,7 +198,7 @@ def fetch_weather_data(lat, lon, start_date, end_date):
         response.raise_for_status()
         data = response.json()['properties']['parameter']
         
-        # Determine precipitation key; use default 0 if not found
+        # Determine precipitation key; if missing, default to 0
         if "PRECTOT" in data:
             precip_key = "PRECTOT"
         elif "PRECTOTCORG" in data:
@@ -220,7 +219,6 @@ def fetch_weather_data(lat, lon, start_date, end_date):
             u2 = data['WS2M'][date_str]               # m/s
             RH = data['RH2M'][date_str]               # %
             
-            # Simplified ET0 calculation using FAO-56 Penman-Monteith
             delta = 4098 * (0.6108 * math.exp((17.27 * Tmean)/(Tmean + 237.3))) / (Tmean + 237.3)**2
             P = 101.3  # kPa
             gamma = 0.000665 * P
@@ -228,7 +226,7 @@ def fetch_weather_data(lat, lon, start_date, end_date):
             ea = es * RH / 100
             ET0 = (0.408 * delta * Rs + gamma * (900/(Tmean+273)) * u2 * (es - ea)) / (delta + gamma * (1 + 0.34*u2))
             et0_list.append(ET0)
-            if precip_key is not None:
+            if precip_key:
                 precip_list.append(data[precip_key][date_str])
             else:
                 precip_list.append(0)
@@ -262,11 +260,10 @@ def fetch_soil_data(lat, lon):
         properties = data['properties']
         layers = []
         for depth in ['0-5cm', '5-15cm']:
-            bdod = properties['bdod'][depth]['mean'] / 100  # Convert to kg/dm³
+            bdod = properties['bdod'][depth]['mean'] / 100
             sand = properties['sand'][depth]['mean']
             clay = properties['clay'][depth]['mean']
             ocd = properties['ocd'][depth]['mean'] / 100
-            # Simplified calculation for FC and WP
             FC = (-0.251 * sand/100 + 0.195 * clay/100 + 0.011 * ocd +
                   0.006 * (sand/100) * ocd - 0.027 * (clay/100) * ocd +
                   0.452 * (sand/100) * (clay/100) + 0.299) * bdod
@@ -328,7 +325,7 @@ def create_grid_in_polygon(polygon, spacing=0.01):
     gdf_utm = gdf.to_crs(utm_crs)
     polygon_utm = gdf_utm.iloc[0].geometry
     bounds = polygon_utm.bounds
-    spacing_m = spacing * 1000  # Convert km to meters
+    spacing_m = spacing * 1000
     x_coords = np.arange(bounds[0], bounds[2], spacing_m)
     y_coords = np.arange(bounds[1], bounds[3], spacing_m)
     grid_points = []
@@ -356,11 +353,9 @@ if mode == "Normal Mode":
         weather_file = st.file_uploader("Weather Data (.txt)", type="txt")
         crop_file = st.file_uploader("Crop Stage Data (.txt)", type="txt")
         soil_file = st.file_uploader("Soil Layers (.txt)", type="txt")
-
         st.header("Options")
         show_monthly_summary = st.checkbox("Show Monthly Summary", value=True)
         track_drainage = st.checkbox("Track Drainage", value=True)
-
         st.header("Yield Estimation")
         enable_yield = st.checkbox("Enable Yield Estimation", value=False)
         if enable_yield:
@@ -372,7 +367,6 @@ if mode == "Normal Mode":
                 Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
             if use_transp:
                 WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
-
         st.header("Leaching Estimation")
         enable_leaching = st.checkbox("Enable Leaching Estimation", value=False)
         if enable_leaching:
@@ -385,7 +379,6 @@ if mode == "Normal Mode":
             elif leaching_method == "Method 2: Leaching Fraction × total N input":
                 total_N_input = st.number_input("Total N Input (kg/ha)", min_value=0.0, value=100.0, step=1.0)
                 leaching_fraction = st.number_input("Leaching Fraction (0-1)", min_value=0.0, max_value=1.0, value=0.1, step=0.01)
-
         run_button = st.button("🚀 Run Simulation")
 
     if run_button and weather_file and crop_file and soil_file:
@@ -394,15 +387,14 @@ if mode == "Normal Mode":
                 weather_df = pd.read_csv(weather_file, parse_dates=['Date'])
                 crop_df = pd.read_csv(crop_file)
                 soil_df = pd.read_csv(soil_file)
-
                 results_df = SIMdualKc(
                     weather_df, crop_df, soil_df, track_drainage,
                     enable_yield=enable_yield,
                     use_fao33=use_fao33 if enable_yield else False,
-                    Ym=Ym if enable_yield and 'Ym' in locals() else 0,
-                    Ky=Ky if enable_yield and 'Ky' in locals() else 0,
+                    Ym=Ym if enable_yield else 0,
+                    Ky=Ky if enable_yield else 0,
                     use_transp=use_transp if enable_yield else False,
-                    WP_yield=WP_yield if enable_yield and 'WP_yield' in locals() else 0,
+                    WP_yield=WP_yield if enable_yield else 0,
                     enable_leaching=enable_leaching,
                     leaching_method=leaching_method if enable_leaching else "",
                     nitrate_conc=nitrate_conc if enable_leaching and leaching_method=="Method 1: Drainage × nitrate concentration" else 0,
@@ -410,7 +402,6 @@ if mode == "Normal Mode":
                     leaching_fraction=leaching_fraction if enable_leaching and leaching_method=="Method 2: Leaching Fraction × total N input" else 0
                 )
                 results_df['SWC (%)'] = (results_df['SW_root (mm)'] / results_df['Root_Depth (mm)']) * 100
-
                 st.success("Simulation completed successfully!")
                 tab1, tab2, tab3, tab4 = st.tabs(["📄 Daily Results", "📈 ET Graphs", "💧 Storage", "🌾 Yield and Leaching"])
                 with tab1:
@@ -463,52 +454,41 @@ if mode == "Normal Mode":
 elif mode == "Spatial Mode":
     st.markdown("### 🌍 Spatial Analysis Mode")
     col1, col2 = st.columns([3, 1])
-    
     with col1:
         m = folium.Map(location=[40, -100], zoom_start=4, tiles="Esri.WorldImagery")
         Draw(export=True, draw_options={"polygon": True, "marker": False, "circlemarker": False}).add_to(m)
         map_data = st_folium(m, key="spatial_map", height=600)
-    
     with col2:
         st.markdown("### Spatial Parameters")
         spacing = st.slider("Grid spacing (km)", 0.1, 5.0, 1.0)
         start_date = st.date_input("Start date", datetime.date.today() - datetime.timedelta(days=30))
         end_date = st.date_input("End date", datetime.date.today())
-        
     if st.button("🚀 Run Spatial Analysis"):
         if map_data and map_data.get("all_drawings"):
             try:
-                # Process drawn polygon(s)
                 shapes = [shape(d["geometry"]) for d in map_data["all_drawings"] if d["geometry"]["type"] == "Polygon"]
                 if not shapes:
                     st.error("No polygon drawn.")
                     st.stop()
-                study_area = gpd.GeoSeries(shapes).unary_union  # Merge polygons if multiple drawn
+                study_area = gpd.GeoSeries(shapes).unary_union
                 st.markdown("### Your Field Boundary")
                 st.write(study_area)
-                
-                # Create grid points within the polygon
                 grid_points = create_grid_in_polygon(study_area, spacing=spacing)
                 if not grid_points:
                     st.warning("No grid points generated! Check your polygon and spacing.")
                     st.stop()
                 st.write(f"Generated {len(grid_points)} sample points within the field.")
-                # Display grid points on a map
                 grid_gdf = gpd.GeoDataFrame(geometry=grid_points, crs="EPSG:4326")
                 grid_gdf["lat"] = grid_gdf.geometry.y
                 grid_gdf["lon"] = grid_gdf.geometry.x
                 st.map(grid_gdf[["lat", "lon"]])
-                
                 st.subheader("Running Spatial Analysis")
                 results = []
                 progress_bar = st.progress(0)
                 status_text = st.empty()
-                
                 for i, point in enumerate(grid_points):
                     lat_pt, lon_pt = point.y, point.x
                     status_text.text(f"Processing point {i+1} of {len(grid_points)} ({lat_pt:.4f}, {lon_pt:.4f})")
-                    
-                    # Fetch spatial inputs
                     weather = fetch_weather_data(lat_pt, lon_pt, start_date, end_date)
                     soil = fetch_soil_data(lat_pt, lon_pt)
                     crop = pd.DataFrame({
@@ -519,7 +499,6 @@ elif mode == "Spatial Mode":
                         "p": [0.5],
                         "Ke": [0.8]
                     })
-                    
                     if weather is not None and soil is not None:
                         result = SIMdualKc(weather, crop, soil)
                         final_sw = result.iloc[-1]["SW_root (mm)"]
@@ -531,12 +510,10 @@ elif mode == "Spatial Mode":
                             "Mean_ETa (mm/day)": mean_et
                         })
                     progress_bar.progress((i+1)/len(grid_points))
-                
                 if results:
                     results_df = pd.DataFrame(results)
                     st.markdown("## 📊 Spatial Results")
                     tab1, tab2, tab3 = st.tabs(["Map Visualization", "Data Table", "Export Data"])
-                    
                     with tab1:
                         st.markdown("### Spatial Distribution Map")
                         m_results = folium.Map(
@@ -544,16 +521,15 @@ elif mode == "Spatial Mode":
                             zoom_start=10,
                             tiles="CartoDB positron"
                         )
-                        
-                        # Add heatmap
+                        # Force conversion of heatmap data to list of lists of floats
+                        heat_data = [[float(r[0]), float(r[1]), float(r[2])] 
+                                     for r in results_df[['lat', 'lon', 'SW_root (mm)']].values.tolist()]
                         HeatMap(
-                            data=results_df[['lat', 'lon', 'SW_root (mm)']].values.tolist(),
+                            data=heat_data,
                             radius=12,
                             blur=20,
-                            gradient={0.4: 'blue', 0.6: 'lime', 1: 'red'}
+                            gradient={0.4: 'blue', 0.6: 'lime', 1.0: 'red'}
                         ).add_to(m_results)
-                        
-                        # Add markers with popups
                         for idx, row in results_df.iterrows():
                             folium.CircleMarker(
                                 location=[row['lat'], row['lon']],
@@ -563,13 +539,10 @@ elif mode == "Spatial Mode":
                                 fill=True,
                                 fill_opacity=0.7
                             ).add_to(m_results)
-                        
                         st_folium(m_results, width=800, height=500)
-                    
                     with tab2:
                         st.markdown("### Raw Results Data")
                         st.dataframe(results_df.sort_values("SW_root (mm)", ascending=False), height=400)
-                    
                     with tab3:
                         st.markdown("### Export Options")
                         csv = results_df.to_csv(index=False)
@@ -583,7 +556,6 @@ elif mode == "Spatial Mode":
                         st.download_button("🌐 Download GeoJSON", geojson, file_name="spatial_results.geojson", mime="application/json")
                 else:
                     st.warning("No results generated! Check input data sources.")
-                        
             except Exception as e:
                 st.error(f"Spatial analysis failed: {str(e)}")
         else:
