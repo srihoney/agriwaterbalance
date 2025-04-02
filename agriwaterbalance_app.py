@@ -1,3 +1,11 @@
+pip install streamlit folium geopandas streamlit-folium requests
+```)
+
+Below is the full working code:
+
+---
+
+```python
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -64,6 +72,7 @@ def interpolate_crop_stages(crop_df, total_days):
             root_list.append(root)
             p_list.append(p)
             ke_list.append(ke)
+    # Here we treat the "root depth" as the second output (RD_list)
     return kcb_list[:total_days], root_list[:total_days], p_list[:total_days], ke_list[:total_days]
 
 def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False, 
@@ -199,26 +208,25 @@ def fetch_weather_data(lat, lon, start_date, end_date):
         response.raise_for_status()
         data = response.json()['properties']['parameter']
         
-        # Calculate reference evapotranspiration (FAO-56 Penman-Monteith)
         dates = []
         et0_list = []
         for date_str in data['T2M_MAX']:
-            dates.append(datetime.datetime.strptime(date_str, "%Y%m%d"))
+            dt = datetime.datetime.strptime(date_str, "%Y%m%d")
+            dates.append(dt)
             Tmax = data['T2M_MAX'][date_str]
             Tmin = data['T2M_MIN'][date_str]
             Tmean = (Tmax + Tmin) / 2
-            Rs = data['ALLSKY_SFC_SW_DWN'][date_str]  # Solar radiation (MJ/m²/day)
-            u2 = data['WS2M'][date_str]               # Wind speed at 2m (m/s)
-            RH = data['RH2M'][date_str]               # Relative humidity (%)
+            Rs = data['ALLSKY_SFC_SW_DWN'][date_str]  # MJ/m²/day
+            u2 = data['WS2M'][date_str]               # m/s
+            RH = data['RH2M'][date_str]               # %
             
-            # ET0 calculation steps
+            # ET0 calculation using FAO-56 Penman-Monteith (simplified)
             delta = 4098 * (0.6108 * math.exp((17.27 * Tmean)/(Tmean + 237.3))) / (Tmean + 237.3)**2
-            P = 101.3 * ((293 - 0.0065 * 0) / 293)**5.26  # Atmospheric pressure
+            P = 101.3  # Simplified atmospheric pressure (kPa)
             gamma = 0.000665 * P
             es = (0.6108 * math.exp(17.27 * Tmax/(Tmax + 237.3)) + 0.6108 * math.exp(17.27 * Tmin/(Tmin + 237.3))) / 2
             ea = es * RH / 100
-            
-            ET0 = (0.408 * delta * (Rs - 0) + gamma * (900/(Tmean + 273)) * u2 * (es - ea)) / (delta + gamma * (1 + 0.34 * u2))
+            ET0 = (0.408 * delta * (Rs) + gamma * (900/(Tmean+273)) * u2 * (es - ea)) / (delta + gamma * (1 + 0.34*u2))
             et0_list.append(ET0)
         
         weather_df = pd.DataFrame({
@@ -235,7 +243,7 @@ def fetch_weather_data(lat, lon, start_date, end_date):
 def fetch_soil_data(lat, lon):
     """Fetch soil data from SoilGrids API."""
     try:
-        url = f"https://rest.soilgrids.org/soilgrids/v2.0/properties/query?"
+        url = "https://rest.soilgrids.org/soilgrids/v2.0/properties/query?"
         params = {
             'lon': lon,
             'lat': lat,
@@ -247,22 +255,20 @@ def fetch_soil_data(lat, lon):
         response.raise_for_status()
         data = response.json()
         
-        # Process soil properties
         properties = data['properties']
         layers = []
         for depth in ['0-5cm', '5-15cm']:
-            bdod = properties['bdod'][depth]['mean'] / 100  # kg/dm³
+            bdod = properties['bdod'][depth]['mean'] / 100  # Convert to kg/dm³
             sand = properties['sand'][depth]['mean']
             clay = properties['clay'][depth]['mean']
-            ocd = properties['ocd'][depth]['mean'] / 100  # %
-            
-            # Calculate field capacity and wilting point using Saxton equations
+            ocd = properties['ocd'][depth]['mean'] / 100
+            # Simplified calculation for FC and WP (replace with robust method as needed)
             FC = (-0.251 * sand/100 + 0.195 * clay/100 + 0.011 * ocd +
-                0.006 * (sand/100) * ocd - 0.027 * (clay/100) * ocd +
-                0.452 * (sand/100) * (clay/100) + 0.299) * bdod
+                  0.006 * (sand/100) * ocd - 0.027 * (clay/100) * ocd +
+                  0.452 * (sand/100) * (clay/100) + 0.299) * bdod
             WP = (-0.024 * sand/100 + 0.487 * clay/100 + 0.006 * ocd +
-                0.005 * (sand/100) * ocd - 0.013 * (clay/100) * ocd +
-                0.068 * (sand/100) * (clay/100) + 0.031) * bdod
+                  0.005 * (sand/100) * ocd - 0.013 * (clay/100) * ocd +
+                  0.068 * (sand/100) * (clay/100) + 0.031) * bdod
             
             layers.append({
                 "Depth_mm": 50 if depth == '0-5cm' else 100,
@@ -283,22 +289,52 @@ def fetch_soil_data(lat, lon):
             "REW": [50, 0]
         })
 
+def fetch_ndvi_data(study_area, start_date, end_date):
+    """
+    Fetch NDVI data using an external API (e.g., Sentinel-2 via GEE or STAC).
+    For demonstration, returns a constant NDVI.
+    """
+    return 0.6
+
+def get_crop_data(ndvi, num_days):
+    """
+    Convert NDVI to a basal crop coefficient (Kcb) using a simple relationship.
+    Returns a crop stage DataFrame covering the simulation period.
+    """
+    kcb = 0.1 + 1.1 * ndvi
+    crop_df = pd.DataFrame({
+        "Start_Day": [1],
+        "End_Day": [num_days],
+        "Kcb": [kcb],
+        "Root_Depth_mm": [300],
+        "p": [0.5],
+        "Ke": [1.0]
+    })
+    return crop_df
+
 def create_grid_in_polygon(polygon, spacing=0.01):
-    """Create grid points within a polygon with UTM projection."""
+    """
+    Create grid points within a polygon.
+    - polygon: a shapely Polygon in EPSG:4326.
+    - spacing: grid spacing in kilometers.
+    Returns a list of shapely Points (in EPSG:4326).
+    """
     gdf = gpd.GeoDataFrame(geometry=[polygon], crs="EPSG:4326")
-    gdf_utm = gdf.to_crs(gdf.estimate_utm_crs())
-    bounds = gdf_utm.total_bounds
-    x_coords = np.arange(bounds[0], bounds[2], spacing*1000)  # Convert degrees to meters
-    y_coords = np.arange(bounds[1], bounds[3], spacing*1000)
+    utm_crs = gdf.estimate_utm_crs()
+    gdf_utm = gdf.to_crs(utm_crs)
+    polygon_utm = gdf_utm.iloc[0].geometry
+    bounds = polygon_utm.bounds
+    spacing_m = spacing * 1000  # Convert km to meters
+    x_coords = np.arange(bounds[0], bounds[2], spacing_m)
+    y_coords = np.arange(bounds[1], bounds[3], spacing_m)
     grid_points = []
     for x in x_coords:
         for y in y_coords:
-            point = gpd.GeoSeries([Point(x, y)], crs=gdf_utm.crs).to_crs(4326)[0]
-            if polygon.contains(point):
-                grid_points.append(point)
+            pt = Point(x, y)
+            if polygon_utm.contains(pt):
+                pt_lonlat = gpd.GeoSeries([pt], crs=utm_crs).to_crs("EPSG:4326").iloc[0]
+                grid_points.append(pt_lonlat)
     return grid_points
-
-# ... [Keep all previous imports and functions unchanged] ...
 
 # -------------------
 # User Interface
@@ -309,6 +345,7 @@ st.markdown("**Spatiotemporal Soil Water Balance Modeling**")
 # Mode selection
 mode = st.radio("Operation Mode:", ["Normal Mode", "Spatial Mode"], horizontal=True)
 
+# ========= NORMAL MODE =========
 if mode == "Normal Mode":
     with st.sidebar:
         st.header("Upload Input Files (.txt)")
@@ -357,16 +394,16 @@ if mode == "Normal Mode":
                 results_df = SIMdualKc(
                     weather_df, crop_df, soil_df, track_drainage,
                     enable_yield=enable_yield,
-                    use_fao33=use_fao33,
-                    Ym=Ym if 'Ym' in locals() else 0,
-                    Ky=Ky if 'Ky' in locals() else 0,
-                    use_transp=use_transp,
-                    WP_yield=WP_yield if 'WP_yield' in locals() else 0,
+                    use_fao33=use_fao33 if enable_yield else False,
+                    Ym=Ym if enable_yield and 'Ym' in locals() else 0,
+                    Ky=Ky if enable_yield and 'Ky' in locals() else 0,
+                    use_transp=use_transp if enable_yield else False,
+                    WP_yield=WP_yield if enable_yield and 'WP_yield' in locals() else 0,
                     enable_leaching=enable_leaching,
-                    leaching_method=leaching_method,
-                    nitrate_conc=nitrate_conc,
-                    total_N_input=total_N_input,
-                    leaching_fraction=leaching_fraction
+                    leaching_method=leaching_method if enable_leaching else "",
+                    nitrate_conc=nitrate_conc if enable_leaching and leaching_method=="Method 1: Drainage × nitrate concentration" else 0,
+                    total_N_input=total_N_input if enable_leaching and leaching_method=="Method 2: Leaching Fraction × total N input" else 0,
+                    leaching_fraction=leaching_fraction if enable_leaching and leaching_method=="Method 2: Leaching Fraction × total N input" else 0
                 )
                 results_df['SWC (%)'] = (results_df['SW_root (mm)'] / results_df['Root_Depth (mm)']) * 100
 
@@ -418,12 +455,13 @@ if mode == "Normal Mode":
     else:
         st.info("📂 Please upload all required files and click 'Run Simulation'.")
 
+# ========= SPATIAL MODE =========
 elif mode == "Spatial Mode":
     st.markdown("### 🌍 Spatial Analysis Mode")
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        m = folium.Map(location=[40, -100], zoom_start=4)
+        m = folium.Map(location=[40, -100], zoom_start=4, tiles="Esri.WorldImagery")
         Draw(export=True, draw_options={"polygon": True, "marker": False, "circlemarker": False}).add_to(m)
         map_data = st_folium(m, key="spatial_map", height=600)
     
@@ -433,128 +471,115 @@ elif mode == "Spatial Mode":
         start_date = st.date_input("Start date", datetime.date.today() - datetime.timedelta(days=30))
         end_date = st.date_input("End date", datetime.date.today())
         
-        if st.button("🚀 Run Spatial Analysis"):
-            if map_data and map_data.get("all_drawings"):
-                try:
-                    # Process drawn polygon
-                    shapes = [shape(d["geometry"]) for d in map_data["all_drawings"] if d["geometry"]["type"] == "Polygon"]
-                    study_area = gpd.GeoSeries(shapes).unary_union
+    if st.button("🚀 Run Spatial Analysis"):
+        if map_data and map_data.get("all_drawings"):
+            try:
+                # Process drawn polygon(s)
+                shapes = [shape(d["geometry"]) for d in map_data["all_drawings"] if d["geometry"]["type"] == "Polygon"]
+                if not shapes:
+                    st.error("No polygon drawn.")
+                    st.stop()
+                study_area = gpd.GeoSeries(shapes).unary_union  # Merge if multiple polygons
+                st.markdown("### Your Field Boundary")
+                st.write(study_area)
+                
+                # Create grid points within the polygon
+                grid_points = create_grid_in_polygon(study_area, spacing=spacing)
+                if not grid_points:
+                    st.warning("No grid points generated! Check your polygon and spacing.")
+                    st.stop()
+                st.write(f"Generated {len(grid_points)} sample points within the field.")
+                # Display grid points on a map
+                grid_gdf = gpd.GeoDataFrame(geometry=grid_points, crs="EPSG:4326")
+                grid_gdf["lat"] = grid_gdf.geometry.y
+                grid_gdf["lon"] = grid_gdf.geometry.x
+                st.map(grid_gdf[["lat", "lon"]])
+                
+                st.subheader("Running Spatial Analysis")
+                results = []
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                for i, point in enumerate(grid_points):
+                    lat_pt, lon_pt = point.y, point.x
+                    status_text.text(f"Processing point {i+1} of {len(grid_points)} ({lat_pt:.4f}, {lon_pt:.4f})")
                     
-                    # Create grid points
-                    grid_points = create_grid_in_polygon(study_area, spacing/111)
+                    # Fetch spatial inputs
+                    weather = fetch_weather_data(lat_pt, lon_pt, start_date, end_date)
+                    soil = fetch_soil_data(lat_pt, lon_pt)
+                    crop = pd.DataFrame({
+                        "Start_Day": [1],
+                        "End_Day": [len(weather)] if weather is not None else [30],
+                        "Kcb": [1.0],
+                        "Root_Depth_mm": [1000],
+                        "p": [0.5],
+                        "Ke": [0.8]
+                    })
                     
-                    if not grid_points:
-                        st.warning("No grid points generated! Check your polygon and spacing.")
-                        st.stop()
-                    
-                    # Run simulation for each point
-                    results = []
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    
-                    for i, point in enumerate(grid_points):
-                        lat, lon = point.y, point.x
-                        status_text.text(f"Processing point {i+1}/{len(grid_points)} ({lat:.4f}, {lon:.4f})")
-                        
-                        # Fetch spatial inputs
-                        weather = fetch_weather_data(lat, lon, start_date, end_date)
-                        soil = fetch_soil_data(lat, lon)
-                        crop = pd.DataFrame({
-                            "Start_Day": [1],
-                            "End_Day": [len(weather)],
-                            "Kcb": [1.0],
-                            "Root_Depth_mm": [1000],
-                            "p": [0.5],
-                            "Ke": [0.8]
+                    if weather is not None and soil is not None:
+                        result = SIMdualKc(weather, crop, soil)
+                        final_sw = result.iloc[-1]["SW_root (mm)"]
+                        mean_et = result["ETa_transp (mm)"].mean()
+                        results.append({
+                            "lat": lat_pt,
+                            "lon": lon_pt,
+                            "SW_root (mm)": final_sw,
+                            "Mean_ETa (mm/day)": mean_et
                         })
-                        
-                        # Run model
-                        if weather is not None and soil is not None:
-                            result = SIMdualKc(weather, crop, soil)
-                            final_sw = result.iloc[-1]["SW_root (mm)"]
-                            results.append({
-                                "lat": lat,
-                                "lon": lon,
-                                "SW_root (mm)": final_sw,
-                                "Mean_ETa (mm/day)": result["ETa_transp (mm)"].mean()
-                            })
-                        
-                        progress_bar.progress((i+1)/len(grid_points))
+                    progress_bar.progress((i+1)/len(grid_points))
+                
+                if results:
+                    results_df = pd.DataFrame(results)
+                    st.markdown("## 📊 Spatial Results")
+                    tab1, tab2, tab3 = st.tabs(["Map Visualization", "Data Table", "Export Data"])
                     
-                    if results:
-                        results_df = pd.DataFrame(results)
+                    with tab1:
+                        st.markdown("### Spatial Distribution Map")
+                        m_results = folium.Map(
+                            location=[results_df.lat.mean(), results_df.lon.mean()], 
+                            zoom_start=10,
+                            tiles="CartoDB positron"
+                        )
                         
-                        # Display Results Section
-                        st.markdown("## 📊 Spatial Results")
+                        # Add heatmap
+                        HeatMap(
+                            data=results_df[['lat', 'lon', 'SW_root (mm)']].values.tolist(),
+                            radius=12,
+                            blur=20,
+                            gradient={0.4: 'blue', 0.6: 'lime', 1: 'red'}
+                        ).add_to(m_results)
                         
-                        # Tabbed Interface
-                        tab1, tab2, tab3 = st.tabs(["Map Visualization", "Data Table", "Export Data"])
-                        
-                        with tab1:
-                            st.markdown("### Spatial Distribution Map")
-                            m_results = folium.Map(
-                                location=[results_df.lat.mean(), results_df.lon.mean()], 
-                                zoom_start=10,
-                                tiles="CartoDB positron"
-                            )
-                            
-                            # Add heatmap
-                            HeatMap(
-                                data=results_df[['lat', 'lon', 'SW_root (mm)']].values.tolist(),
-                                radius=12,
-                                blur=20,
-                                gradient={0.4: 'blue', 0.6: 'lime', 1: 'red'}
+                        # Add markers with popups
+                        for idx, row in results_df.iterrows():
+                            folium.CircleMarker(
+                                location=[row['lat'], row['lon']],
+                                radius=3,
+                                popup=f"SW: {row['SW_root (mm)']:.1f} mm<br>ETa: {row['Mean_ETa (mm/day)']:.1f} mm/day",
+                                color='#3186cc',
+                                fill=True,
+                                fill_opacity=0.7
                             ).add_to(m_results)
-                            
-                            # Add markers with popups
-                            for idx, row in results_df.iterrows():
-                                folium.CircleMarker(
-                                    location=[row['lat'], row['lon']],
-                                    radius=3,
-                                    popup=f"SW: {row['SW_root (mm)']:.1f} mm<br>ETa: {row['Mean_ETa (mm/day)']:.1f mm/day",
-                                    color='#3186cc',
-                                    fill=True
-                                ).add_to(m_results)
-                            
-                            st_folium(m_results, width=800, height=500)
                         
-                        with tab2:
-                            st.markdown("### Raw Results Data")
-                            st.dataframe(
-                                results_df.sort_values("SW_root (mm)", ascending=False),
-                                height=400,
-                                use_container_width=True
-                            )
-                        
-                        with tab3:
-                            st.markdown("### Export Options")
-                            
-                            # CSV Export
-                            csv = results_df.to_csv(index=False)
-                            st.download_button(
-                                label="📥 Download CSV",
-                                data=csv,
-                                file_name="spatial_water_balance.csv",
-                                mime="text/csv"
-                            )
-                            
-                            # GeoJSON Export
-                            gdf = gpd.GeoDataFrame(
-                                results_df,
-                                geometry=gpd.points_from_xy(results_df.lon, results_df.lat),
-                                crs="EPSG:4326"
-                            )
-                            geojson = gdf.to_json()
-                            st.download_button(
-                                label="🌐 Download GeoJSON",
-                                data=geojson,
-                                file_name="spatial_results.geojson",
-                                mime="application/json"
-                            )
-                    else:
-                        st.warning("No results generated! Check input data sources.")
-                        
-                except Exception as e:
-                    st.error(f"Spatial analysis failed: {str(e)}")
-            else:
-                st.warning("Please draw a polygon on the map first!")
+                        st_folium(m_results, width=800, height=500)
+                    
+                    with tab2:
+                        st.markdown("### Raw Results Data")
+                        st.dataframe(results_df.sort_values("SW_root (mm)", ascending=False), height=400)
+                    
+                    with tab3:
+                        st.markdown("### Export Options")
+                        csv = results_df.to_csv(index=False)
+                        st.download_button("📥 Download CSV", csv, file_name="spatial_water_balance.csv", mime="text/csv")
+                        gdf = gpd.GeoDataFrame(
+                            results_df,
+                            geometry=gpd.points_from_xy(results_df.lon, results_df.lat),
+                            crs="EPSG:4326"
+                        )
+                        geojson = gdf.to_json()
+                        st.download_button("🌐 Download GeoJSON", geojson, file_name="spatial_results.geojson", mime="application/json")
+                else:
+                    st.warning("No results generated! Check input data sources.")
+            except Exception as e:
+                st.error(f"Spatial analysis failed: {str(e)}")
+        else:
+            st.warning("Please draw a polygon on the map first!")
