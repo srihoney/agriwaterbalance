@@ -2,13 +2,12 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import datetime
+from datetime import datetime, timedelta  # Updated import
 import requests
 import math
 import time
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from datetime import datetime, timedelta
 
 # Configure Requests Session with Retries
 session = requests.Session()
@@ -285,8 +284,8 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False):
 
     if forecast:
         # OpenWeatherMap API for forecast
-        api_key = "fe2d869569674a4afbfca57707bdf691"  # <--- Place your API key here
-        url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={fe2d869569674a4afbfca57707bdf691}&units=metric"
+        api_key = "fe2d869569674a4afbfca57707bdf691"  # Your API key
+        url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"  # Use api_key variable
         try:
             response = session.get(url, timeout=30)
             response.raise_for_status()
@@ -541,8 +540,8 @@ with setup_tab:
                 
                 if enable_etaforecast:
                     last_date = weather_df['Date'].max()
-                    forecast_start = last_date + datetime.timedelta(days=1)
-                    forecast_end = forecast_start + datetime.timedelta(days=6)
+                    forecast_start = last_date + timedelta(days=1)  # Use timedelta directly
+                    forecast_end = forecast_start + timedelta(days=6)
                     forecast_weather = fetch_weather_data(forecast_lat, forecast_lon, forecast_start, forecast_end, forecast=True)
                     if forecast_weather is not None:
                         forecast_results = SIMdualKc(forecast_weather, crop_df, soil_df, track_drainage, enable_yield,
