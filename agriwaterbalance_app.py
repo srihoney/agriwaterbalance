@@ -171,6 +171,10 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
               total_N_input=0, leaching_fraction=0,
               enable_dynamic_root=False, initial_root_depth=None, max_root_depth=None, days_to_max=None,
               return_soil_profile=False):
+    if weather_df.empty:
+        st.error("Weather DataFrame is empty. Cannot run simulation.")
+        return None
+    
     total_days = len(weather_df)
     results = []
     SW_layers = [soil['FC'] * soil['Depth_mm'] for _, soil in soil_df.iterrows()]
@@ -338,6 +342,10 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
                         daily_data[date_str]['tmin'] = min(daily_data[date_str]['tmin'], entry['main']['temp_min'])
                         daily_data[date_str]['precip'] += entry.get('rain', {}).get('3h', 0)
             
+            if not daily_data:
+                st.warning("No forecast data available for the specified date range.")
+                return None
+
             dates = []
             ETo_list = []
             precip_list = []
@@ -366,7 +374,6 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
             # Sort by date
             weather_df = weather_df.sort_values("Date").reset_index(drop=True)
             
-            # No extrapolation needed since we're sticking to 5 days
             st.session_state.weather_cache[cache_key] = weather_df
             return weather_df
         except Exception as e:
@@ -524,7 +531,7 @@ with setup_tab:
                     tmax_values = []
                     tmin_values = []
                     precip_values = []
-                    for i in range(5):  # Changed to 5 days
+                    for i in range(5):
                         st.write(f"Day {i+1}")
                         tmax = st.number_input(f"Maximum Temperature (°C) for Day {i+1}", value=20.0, key=f"tmax_{i}")
                         tmin = st.number_input(f"Minimum Temperature (°C) for Day {i+1}", value=10.0, key=f"tmin_{i}")
@@ -616,6 +623,10 @@ with setup_tab:
                                            return_soil_profile=False)
                     st.session_state.soil_profile = None
                 
+                if results_df is None:
+                    st.error("Simulation failed to produce results. Please check your input data.")
+                    st.stop()
+                
                 st.session_state.results_df = results_df
                 
                 if enable_etaforecast:
@@ -624,12 +635,20 @@ with setup_tab:
                     forecast_end = forecast_start + timedelta(days=4)  # 5 days total
                     forecast_weather = fetch_weather_data(forecast_lat, forecast_lon, forecast_start, forecast_end, forecast=True, manual_data=manual_forecast_data)
                     if forecast_weather is not None:
-                        forecast_results = SIMdualKc(forecast_weather, crop_df, soil_df, track_drainage, enable_yield,
-                                                     use_fao33, Ym, Ky, use_transp, WP_yield,
-                                                     enable_leaching, leaching_method, nitrate_conc,
-                                                     total_N_input, leaching_fraction,
-                                                     enable_dynamic_root, initial_root_depth, max_root_depth, days_to_max)
-                        st.session_state.forecast_results = forecast_results
+                        if forecast_weather.empty:
+                            st.warning("Forecast weather data is empty. Cannot generate ETa forecast.")
+                            st.session_state.forecast_results = None
+                        else:
+                            forecast_results = SIMdualKc(forecast_weather, crop_df, soil_df, track_drainage, enable_yield,
+                                                         use_fao33, Ym, Ky, use_transp, WP_yield,
+                                                         enable_leaching, leaching_method, nitrate_conc,
+                                                         total_N_input, leaching_fraction,
+                                                         enable_dynamic_root, initial_root_depth, max_root_depth, days_to_max)
+                            if forecast_results is None:
+                                st.warning("Failed to generate forecast results. Please check your input data.")
+                                st.session_state.forecast_results = None
+                            else:
+                                st.session_state.forecast_results = forecast_results
                     else:
                         st.session_state.forecast_results = None
                         st.warning("Unable to fetch forecast data. Please try again later or use manual input.")
@@ -653,11 +672,22 @@ with results_tab:
             csv = results_df.to_csv(index=False)
             st.download_button("Download Results (.txt)", csv, file_name="results.txt", mime="text/plain")
         
-        if enable_etaforecast and forecast_results is not None:
-            st.markdown('<div class="sub-header">5-Day ETa Forecast</div>', unsafe_allow_html=True)
-            with st.container():
-                st.dataframe(forecast_results[["Date", "ETa_total (mm)"]])
-                st.write("Note: Forecast is based on OpenWeatherMap data or manual input. Values are ensured to be non-negative.")
+        if enable_etaforecast:
+            if forecast_results is not None and not forecast_results.empty:
+                st.markdown('<div class="sub-header">5-Day ETa Forecast</div>', unsafe_allow_html=True)
+                with st.container():
+                    # Debug: Check available columns
+                    st.write("Available columns in forecast_results:", forecast_results.columns.tolist())
+                    # Ensure required columns exist
+                    required_columns = ["Date", "ETa_total (mm)"]
+                    missing_columns = [col for col in required_columns if col not in forecast_results.columns]
+                    if missing_columns:
+                        st.error(f"Missing required columns in forecast results: {missing_columns}")
+                    else:
+                        st.dataframe(forecast_results[["Date", "ETa_total (mm)"]])
+                        st.write("Note: Forecast is based on OpenWeatherMap data or manual input. Values are ensured to be non-negative.")
+            else:
+                st.warning("No forecast results available. Please ensure forecast data was fetched successfully or use manual input.")
         
         st.markdown('<div class="sub-header">Graphs</div>', unsafe_allow_html=True)
         with st.container():
