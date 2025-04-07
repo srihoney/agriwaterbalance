@@ -18,6 +18,61 @@ session.mount('https://', HTTPAdapter(max_retries=retries))
 # App Configuration
 st.set_page_config(page_title="AgriWaterBalance", layout="wide")
 
+# Custom CSS for Professional Look
+st.markdown("""
+    <style>
+    .main-header {
+        background-color: #1E3A8A;
+        color: white;
+        padding: 20px;
+        border-radius: 5px;
+        text-align: center;
+        font-size: 36px;
+        font-weight: bold;
+        margin-bottom: 20px;
+    }
+    .sub-header {
+        color: #1E3A8A;
+        font-size: 24px;
+        font-weight: bold;
+        margin-top: 20px;
+    }
+    .footer {
+        background-color: #1E3A8A;
+        color: white;
+        padding: 10px;
+        text-align: center;
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+        border-radius: 5px 5px 0 0;
+    }
+    .stButton>button {
+        background-color: #2563EB;
+        color: white;
+        border-radius: 5px;
+        padding: 10px 20px;
+        font-size: 16px;
+    }
+    .stButton>button:hover {
+        background-color: #1E40AF;
+    }
+    .stFileUploader {
+        border: 2px dashed #1E3A8A;
+        border-radius: 5px;
+        padding: 10px;
+    }
+    .stSelectbox {
+        background-color: #F1F5F9;
+        border-radius: 5px;
+    }
+    .stNumberInput input {
+        background-color: #F1F5F9;
+        border-radius: 5px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # Cache for weather data
 if 'weather_cache' not in st.session_state:
     st.session_state.weather_cache = {}
@@ -123,17 +178,17 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
     
     for day in range(total_days):
         date = weather_df.iloc[day]['Date']
-        ET0 = weather_df.iloc[day]['ET0']
-        precip = weather_df.iloc[day]['Precipitation']
-        irrig = weather_df.iloc[day]['Irrigation']
+        ET0 = max(0, weather_df.iloc[day]['ET0'])  # Ensure ETo is non-negative
+        precip = max(0, weather_df.iloc[day]['Precipitation'])  # Ensure precipitation is non-negative
+        irrig = max(0, weather_df.iloc[day]['Irrigation'])  # Ensure irrigation is non-negative
         
         cumulative_irrigation += irrig
         cumulative_precip += precip
         
-        Kcb = Kcb_daily[day]
-        p = p_daily[day]
-        Ke = Ke_daily[day]
-        root_depth = root_depth_daily[day]
+        Kcb = max(0, Kcb_daily[day])
+        p = max(0, min(1, p_daily[day]))
+        Ke = max(0, Ke_daily[day])
+        root_depth = max(1, root_depth_daily[day])
         
         total_depth = 0
         SW_root = 0
@@ -155,8 +210,8 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
         Ks = compute_Ks(SW_root / root_depth if root_depth > 0 else 0, soil_df['WP'].mean(), soil_df['FC'].mean(), p)
         Kr = compute_Kr(soil_df['TEW'].sum(), soil_df['REW'].sum(), E)
         ETc = compute_ETc(Kcb, Ks, Ke, ET0)
-        ETa_transp = max(0, Kcb * Ks * ET0)  # Clamp to non-negative
-        ETa_evap = max(0, Ke * Kr * ET0)     # Clamp to non-negative
+        ETa_transp = max(0, Kcb * Ks * ET0)
+        ETa_evap = max(0, Ke * Kr * ET0)
         ETa_total = ETa_transp + ETa_evap
         
         water_input = precip + irrig
@@ -169,9 +224,10 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
                     added = min(excess, capacity)
                     SW_layers[j] += added
                     excess -= added
-            drainage = excess if excess > 0 else 0
+            drainage = max(0, excess)
             for j in range(len(SW_layers)):
                 SW_layers[j] = min(SW_layers[j], soil_df.iloc[j]['FC'] * soil_df.iloc[j]['Depth_mm'])
+                SW_layers[j] = max(SW_layers[j], soil_df.iloc[j]['WP'] * soil_df.iloc[j]['Depth_mm'])
         
         for j in range(len(SW_layers)):
             depletion = ETa_total * (SW_layers[j] / SW_root) if SW_root > 0 else 0
@@ -230,31 +286,46 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False):
     if forecast:
         # OpenWeatherMap API for forecast
         api_key = "fe2d869569674a4afbfca57707bdf691"  # <--- Place your API key here
-        url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"
+        url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={fe2d869569674a4afbfca57707bdf691}&units=metric"
         try:
             response = session.get(url, timeout=30)
             response.raise_for_status()
             data = response.json()
             
-            dates = []
-            ETo_list = []
-            precip_list = []
+            # Aggregate 3-hourly data into daily data
+            daily_data = {}
             for entry in data['list']:
                 dt = datetime.fromtimestamp(entry['dt'])
                 if start_date <= dt <= end_date:
-                    dates.append(dt)
-                    # Simplified ETo calculation (Hargreaves method)
-                    tmax = entry['main']['temp_max']
-                    tmin = entry['main']['temp_min']
-                    # Hargreaves method: ETo = 0.0023 * Ra * (Tmean + 17.8) * (Tmax - Tmin)^0.5
-                    # For simplicity, approximate Ra (extraterrestrial radiation) as a constant
-                    Ra = 10  # Placeholder; ideally calculate based on latitude and day of year
-                    Tmean = (tmax + tmin) / 2
-                    ETo = 0.0023 * Ra * (Tmean + 17.8) * (tmax - tmin) ** 0.5
-                    ETo = max(0, ETo)  # Ensure ETo is non-negative
-                    ETo_list.append(ETo)
-                    precip = entry.get('rain', {}).get('3h', 0)
-                    precip_list.append(precip)
+                    date_str = dt.strftime("%Y-%m-%d")
+                    if date_str not in daily_data:
+                        daily_data[date_str] = {
+                            'tmax': entry['main']['temp_max'],
+                            'tmin': entry['main']['temp_min'],
+                            'precip': entry.get('rain', {}).get('3h', 0)
+                        }
+                    else:
+                        daily_data[date_str]['tmax'] = max(daily_data[date_str]['tmax'], entry['main']['temp_max'])
+                        daily_data[date_str]['tmin'] = min(daily_data[date_str]['tmin'], entry['main']['temp_min'])
+                        daily_data[date_str]['precip'] += entry.get('rain', {}).get('3h', 0)
+            
+            dates = []
+            ETo_list = []
+            precip_list = []
+            for date_str, values in daily_data.items():
+                dates.append(pd.to_datetime(date_str))
+                tmax = values['tmax']
+                tmin = values['tmin']
+                # Ensure tmax >= tmin to avoid negative square root
+                if tmax < tmin:
+                    tmax, tmin = tmin, tmax
+                # Hargreaves method for ETo
+                Ra = 10  # Simplified; ideally calculate based on latitude and day of year
+                Tmean = (tmax + tmin) / 2
+                ETo = 0.0023 * Ra * (Tmean + 17.8) * (tmax - tmin) ** 0.5
+                ETo = max(0, ETo)  # Ensure ETo is non-negative
+                ETo_list.append(ETo)
+                precip_list.append(values['precip'])
             
             weather_df = pd.DataFrame({
                 "Date": dates,
@@ -263,12 +334,16 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False):
                 "Irrigation": [0] * len(dates)
             })
             
-            # Extrapolate to 7 days if needed
+            # Sort by date
+            weather_df = weather_df.sort_values("Date").reset_index(drop=True)
+            
+            # Extrapolate to 7 days by averaging the last 3 days
             if len(weather_df) < 7:
-                last_day = weather_df.iloc[-1].copy()
+                last_days = weather_df.tail(3)
+                avg_data = last_days.mean(numeric_only=True)
                 extra_days = 7 - len(weather_df)
-                extra_dates = pd.date_range(start=last_day['Date'] + timedelta(days=1), periods=extra_days)
-                extra_data = pd.DataFrame([last_day] * extra_days)
+                extra_dates = pd.date_range(start=weather_df['Date'].max() + timedelta(days=1), periods=extra_days)
+                extra_data = pd.DataFrame([avg_data] * extra_days)
                 extra_data['Date'] = extra_dates
                 weather_df = pd.concat([weather_df, extra_data], ignore_index=True)
             
@@ -304,10 +379,11 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False):
             return None
 
 # User Interface
-st.title("AgriWaterBalance")
-st.markdown("**A Simple Tool for Soil Water Management**")
+st.markdown('<div class="main-header">AgriWaterBalance</div>', unsafe_allow_html=True)
+st.markdown("**A Professional Tool for Soil Water Management**", unsafe_allow_html=True)
 
-setup_tab, results_tab = st.tabs(["Simulation Setup", "Results"])
+# Navigation Tabs
+setup_tab, results_tab = st.tabs(["Setup Simulation", "View Results"])
 
 if 'results_df' not in st.session_state:
     st.session_state.results_df = None
@@ -317,118 +393,124 @@ if 'soil_profile' not in st.session_state:
     st.session_state.soil_profile = None
 
 with setup_tab:
-    st.header("Upload Input Files")
+    st.markdown('<div class="sub-header">Input Data Configuration</div>', unsafe_allow_html=True)
     
-    st.subheader("Weather Data")
-    st.write("Upload a text file with columns: Date, ET0, Precipitation, Irrigation")
-    weather_file = st.file_uploader("Weather Data (.txt)", type="txt")
-    sample_weather = pd.DataFrame({
-        "Date": ["2023-01-01", "2023-01-02", "2023-01-03"],
-        "ET0": [5.0, 5.2, 4.8],
-        "Precipitation": [0.0, 2.0, 0.0],
-        "Irrigation": [0.0, 0.0, 10.0]
-    })
-    st.download_button("Download Sample Weather Data", sample_weather.to_csv(index=False), file_name="weather_sample.txt", mime="text/plain")
+    with st.container():
+        st.markdown("#### Upload Input Files")
+        
+        with st.expander("Weather Data"):
+            st.write("Upload a text file with columns: Date, ET0, Precipitation, Irrigation")
+            weather_file = st.file_uploader("Weather Data File (.txt)", type="txt", key="weather")
+            sample_weather = pd.DataFrame({
+                "Date": ["2023-01-01", "2023-01-02", "2023-01-03"],
+                "ET0": [5.0, 5.2, 4.8],
+                "Precipitation": [0.0, 2.0, 0.0],
+                "Irrigation": [0.0, 0.0, 10.0]
+            })
+            st.download_button("Download Sample Weather Data", sample_weather.to_csv(index=False), file_name="weather_sample.txt", mime="text/plain")
+        
+        with st.expander("Crop Stage Data"):
+            crop_input_method = st.selectbox("Select Crop Input Method", ["Upload My Own", "Maize", "Wheat", "Soybean", "Rice", "Almond", "Tomato", "Custom"])
+            if crop_input_method == "Upload My Own":
+                crop_file = st.file_uploader("Crop Stage Data File (.txt)", type="txt", key="crop")
+                sample_crop = pd.DataFrame({
+                    "Start_Day": [1, 31],
+                    "End_Day": [30, 60],
+                    "Kcb": [0.3, 1.2],
+                    "Root_Depth_mm": [300, 1000],
+                    "p": [0.5, 0.55],
+                    "Ke": [0.7, 0.8]
+                })
+                st.download_button("Download Sample Crop Data", sample_crop.to_csv(index=False), file_name="crop_sample.txt", mime="text/plain")
+            else:
+                templates = {
+                    "Maize": {"Kcb": 1.2, "Root_Depth_mm": 1500, "p": 0.55, "Ke": 0.7},
+                    "Wheat": {"Kcb": 1.1, "Root_Depth_mm": 1200, "p": 0.5, "Ke": 0.6},
+                    "Soybean": {"Kcb": 1.0, "Root_Depth_mm": 1000, "p": 0.5, "Ke": 0.7},
+                    "Rice": {"Kcb": 1.3, "Root_Depth_mm": 800, "p": 0.2, "Ke": 1.0},
+                    "Almond": {"Kcb": 0.9, "Root_Depth_mm": 1000, "p": 0.45, "Ke": 0.8},
+                    "Tomato": {"Kcb": 1.0, "Root_Depth_mm": 900, "p": 0.5, "Ke": 0.75},
+                    "Custom": {"Kcb": 1.0, "Root_Depth_mm": 1000, "p": 0.5, "Ke": 1.0}
+                }
+                template = templates[crop_input_method]
+                crop_df = pd.DataFrame({
+                    "Start_Day": [1],
+                    "End_Day": [100],
+                    "Kcb": [template["Kcb"]],
+                    "Root_Depth_mm": [template["Root_Depth_mm"]],
+                    "p": [template["p"]],
+                    "Ke": [template["Ke"]]
+                })
+                st.write("Edit Crop Stage Data (Optional)")
+                crop_df = st.data_editor(crop_df, num_rows="dynamic")
+        
+        with st.expander("Soil Layers Data"):
+            st.write("Upload a text file with columns: Depth_mm, FC, WP, TEW, REW")
+            soil_file = st.file_uploader("Soil Layers File (.txt)", type="txt", key="soil")
+            sample_soil = pd.DataFrame({
+                "Depth_mm": [200, 100],
+                "FC": [0.30, 0.30],
+                "WP": [0.15, 0.15],
+                "TEW": [20, 0],
+                "REW": [5, 0]
+            })
+            st.download_button("Download Sample Soil Data", sample_soil.to_csv(index=False), file_name="soil_sample.txt", mime="text/plain")
     
-    st.subheader("Crop Stage Data")
-    crop_input_method = st.selectbox("Select Crop Input Method", ["Upload My Own", "Maize", "Wheat", "Soybean", "Rice", "Almond", "Tomato", "Custom"])
-    if crop_input_method == "Upload My Own":
-        crop_file = st.file_uploader("Crop Stage Data (.txt)", type="txt")
-        sample_crop = pd.DataFrame({
-            "Start_Day": [1, 31],
-            "End_Day": [30, 60],
-            "Kcb": [0.3, 1.2],
-            "Root_Depth_mm": [300, 1000],
-            "p": [0.5, 0.55],
-            "Ke": [0.7, 0.8]
-        })
-        st.download_button("Download Sample Crop Data", sample_crop.to_csv(index=False), file_name="crop_sample.txt", mime="text/plain")
-    else:
-        templates = {
-            "Maize": {"Kcb": 1.2, "Root_Depth_mm": 1500, "p": 0.55, "Ke": 0.7},
-            "Wheat": {"Kcb": 1.1, "Root_Depth_mm": 1200, "p": 0.5, "Ke": 0.6},
-            "Soybean": {"Kcb": 1.0, "Root_Depth_mm": 1000, "p": 0.5, "Ke": 0.7},
-            "Rice": {"Kcb": 1.3, "Root_Depth_mm": 800, "p": 0.2, "Ke": 1.0},
-            "Almond": {"Kcb": 0.9, "Root_Depth_mm": 1000, "p": 0.45, "Ke": 0.8},
-            "Tomato": {"Kcb": 1.0, "Root_Depth_mm": 900, "p": 0.5, "Ke": 0.75},
-            "Custom": {"Kcb": 1.0, "Root_Depth_mm": 1000, "p": 0.5, "Ke": 1.0}
-        }
-        template = templates[crop_input_method]
-        crop_df = pd.DataFrame({
-            "Start_Day": [1],
-            "End_Day": [100],
-            "Kcb": [template["Kcb"]],
-            "Root_Depth_mm": [template["Root_Depth_mm"]],
-            "p": [template["p"]],
-            "Ke": [template["Ke"]]
-        })
-        st.write("Edit Crop Stage Data (Optional)")
-        crop_df = st.data_editor(crop_df, num_rows="dynamic")
+    with st.container():
+        st.markdown("#### Additional Features")
+        
+        with st.expander("Simulation Options"):
+            track_drainage = st.checkbox("Track Drainage", value=True, help="Monitor water drainage from the soil.")
+            enable_yield = st.checkbox("Enable Yield Estimation", value=False, help="Estimate crop yield based on water use.")
+            if enable_yield:
+                st.markdown("**Yield Estimation Options**")
+                use_fao33 = st.checkbox("Use FAO-33 Ky-based method", value=True, help="Standard method for yield estimation.")
+                if use_fao33:
+                    Ym = st.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1)
+                    Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
+                use_transp = st.checkbox("Use Transpiration-based method", value=False, help="Estimate yield based on transpiration.")
+                if use_transp:
+                    WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
+            else:
+                use_fao33 = use_transp = False
+                Ym = Ky = WP_yield = 0
+            
+            enable_leaching = st.checkbox("Enable Leaching Estimation", value=False, help="Estimate nitrate leaching from the soil.")
+            if enable_leaching:
+                leaching_method = st.radio("Select Leaching Method", ["Method 1: Drainage × nitrate concentration", "Method 2: Leaching Fraction × total N input"])
+                if leaching_method == "Method 1: Drainage × nitrate concentration":
+                    nitrate_conc = st.number_input("Nitrate Concentration (mg/L)", min_value=0.0, value=10.0, step=0.1)
+                    total_N_input = leaching_fraction = 0
+                else:
+                    total_N_input = st.number_input("Total N Input (kg/ha)", min_value=0.0, value=100.0, step=1.0)
+                    leaching_fraction = st.number_input("Leaching Fraction (0-1)", min_value=0.0, max_value=1.0, value=0.1, step=0.01)
+                    nitrate_conc = 0
+            else:
+                leaching_method = ""
+                nitrate_conc = total_N_input = leaching_fraction = 0
+            
+            enable_etaforecast = st.checkbox("Enable 7-Day ETa Forecast", value=False, help="Generate a 7-day forecast of actual evapotranspiration.")
+            if enable_etaforecast:
+                st.write("Enter your field's coordinates for weather forecasting. Find these using Google Maps by right-clicking on your field's location.")
+                forecast_lat = st.number_input("Field Latitude", value=0.0)
+                forecast_lon = st.number_input("Field Longitude", value=0.0)
+            else:
+                forecast_lat = forecast_lon = 0.0
+            
+            enable_nue = st.checkbox("Enable NUE Estimation", value=False, help="Estimate Nitrogen Use Efficiency (requires yield and nitrogen input).")
+            enable_dynamic_root = st.checkbox("Enable Dynamic Root Growth", value=False, help="Simulate root growth over time.")
+            if enable_dynamic_root:
+                initial_root_depth = st.number_input("Initial Root Depth (mm)", min_value=50, value=300, step=10)
+                max_root_depth = st.number_input("Maximum Root Depth (mm)", min_value=50, value=1000, step=10)
+                days_to_max = st.number_input("Days to Reach Maximum Root Depth", min_value=1, value=60, step=1)
+            else:
+                initial_root_depth = max_root_depth = days_to_max = None
+            
+            show_soil_profile = st.checkbox("Show Soil Profile Water Storage", value=False, help="Visualize water storage in soil layers.")
     
-    st.subheader("Soil Layers Data")
-    st.write("Upload a text file with columns: Depth_mm, FC, WP, TEW, REW")
-    soil_file = st.file_uploader("Soil Layers (.txt)", type="txt")
-    sample_soil = pd.DataFrame({
-        "Depth_mm": [200, 100],
-        "FC": [0.30, 0.30],
-        "WP": [0.15, 0.15],
-        "TEW": [20, 0],
-        "REW": [5, 0]
-    })
-    st.download_button("Download Sample Soil Data", sample_soil.to_csv(index=False), file_name="soil_sample.txt", mime="text/plain")
-    
-    st.header("Additional Features")
-    track_drainage = st.checkbox("Track Drainage", value=True)
-    enable_yield = st.checkbox("Enable Yield Estimation", value=False)
-    if enable_yield:
-        st.subheader("Yield Estimation Options")
-        use_fao33 = st.checkbox("Use FAO-33 Ky-based method", value=True)
-        if use_fao33:
-            Ym = st.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1)
-            Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
-        use_transp = st.checkbox("Use Transpiration-based method", value=False)
-        if use_transp:
-            WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
-    else:
-        use_fao33 = use_transp = False
-        Ym = Ky = WP_yield = 0
-    
-    enable_leaching = st.checkbox("Enable Leaching Estimation", value=False)
-    if enable_leaching:
-        leaching_method = st.radio("Select Leaching Method", ["Method 1: Drainage × nitrate concentration", "Method 2: Leaching Fraction × total N input"])
-        if leaching_method == "Method 1: Drainage × nitrate concentration":
-            nitrate_conc = st.number_input("Nitrate Concentration (mg/L)", min_value=0.0, value=10.0, step=0.1)
-            total_N_input = leaching_fraction = 0
-        else:
-            total_N_input = st.number_input("Total N Input (kg/ha)", min_value=0.0, value=100.0, step=1.0)
-            leaching_fraction = st.number_input("Leaching Fraction (0-1)", min_value=0.0, max_value=1.0, value=0.1, step=0.01)
-            nitrate_conc = 0
-    else:
-        leaching_method = ""
-        nitrate_conc = total_N_input = leaching_fraction = 0
-    
-    enable_etaforecast = st.checkbox("Enable ETa Forecast (7-day forecast of actual ETa)", value=False)
-    if enable_etaforecast:
-        st.write("Enter your field's coordinates for weather forecasting. You can find these using Google Maps by right-clicking on your field's location.")
-        forecast_lat = st.number_input("Field Latitude", value=0.0)
-        forecast_lon = st.number_input("Field Longitude", value=0.0)
-    else:
-        forecast_lat = forecast_lon = 0.0
-    
-    enable_nue = st.checkbox("Enable NUE Estimation", value=False)
-    enable_dynamic_root = st.checkbox("Enable Dynamic Root Growth", value=False)
-    if enable_dynamic_root:
-        initial_root_depth = st.number_input("Initial Root Depth (mm)", min_value=50, value=300, step=10)
-        max_root_depth = st.number_input("Maximum Root Depth (mm)", min_value=50, value=1000, step=10)
-        days_to_max = st.number_input("Days to Reach Maximum Root Depth", min_value=1, value=60, step=1)
-    else:
-        initial_root_depth = max_root_depth = days_to_max = None
-    
-    show_soil_profile = st.checkbox("Show Soil Profile Water Storage Visualization", value=False)
-    
-    run_button = st.button("Run Simulation")
-    
-    if run_button:
+    st.button("Run Simulation", key="run_simulation")
+
+    if st.session_state.get('run_simulation', False):
         if weather_file and (crop_file or crop_input_method != "Upload My Own") and soil_file:
             try:
                 weather_df = pd.read_csv(weather_file, parse_dates=['Date'])
@@ -486,113 +568,119 @@ with results_tab:
         forecast_results = st.session_state.forecast_results
         soil_profile = st.session_state.soil_profile
         
-        st.subheader("Simulation Results")
-        st.dataframe(results_df)
-        csv = results_df.to_csv(index=False)
-        st.download_button("Download Results (.txt)", csv, file_name="results.txt", mime="text/plain")
+        st.markdown('<div class="sub-header">Simulation Results</div>', unsafe_allow_html=True)
+        with st.container():
+            st.dataframe(results_df)
+            csv = results_df.to_csv(index=False)
+            st.download_button("Download Results (.txt)", csv, file_name="results.txt", mime="text/plain")
         
         if enable_etaforecast and forecast_results is not None:
-            st.subheader("7-Day ETa Forecast")
-            st.dataframe(forecast_results[["Date", "ETa_total (mm)"]])
-            st.write("Note: Forecast is based on OpenWeatherMap data. Values are clamped to non-negative for consistency.")
+            st.markdown('<div class="sub-header">7-Day ETa Forecast</div>', unsafe_allow_html=True)
+            with st.container():
+                st.dataframe(forecast_results[["Date", "ETa_total (mm)"]])
+                st.write("Note: Forecast is based on OpenWeatherMap data. Values are ensured to be non-negative.")
         
-        st.subheader("Graphs")
-        plot_options = ["ETa Components", "Cumulative Metrics", "Soil Water Storage", "Drainage", "Root Depth"]
-        if 'Yield (ton/ha)' in results_df.columns:
-            plot_options.append("Yield")
-        if 'Leaching (kg/ha)' in results_df.columns:
-            plot_options.append("Leaching")
-        if 'NUE (kg/ha)' in results_df.columns:
-            plot_options.append("NUE")
-        if show_soil_profile and soil_profile is not None:
-            plot_options.append("Soil Profile Water")
-        
-        plot_option = st.selectbox("Select Plot", plot_options)
-        
-        if plot_option == "ETa Components":
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(results_df['Date'], results_df['ETa_transp (mm)'], label="Transpiration")
-            ax.plot(results_df['Date'], results_df['ETa_evap (mm)'], label="Evaporation")
-            ax.plot(results_df['Date'], results_df['ETc (mm)'], label="ETc")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("ET (mm)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        
-        elif plot_option == "Cumulative Metrics":
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(results_df['Date'], results_df['Cumulative_Irrigation (mm)'], label="Cumulative Irrigation")
-            ax.plot(results_df['Date'], results_df['Cumulative_Precip (mm)'], label="Cumulative Precipitation")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Cumulative (mm)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        
-        elif plot_option == "Soil Water Storage":
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(results_df['Date'], results_df['SW_root (mm)'], label="Soil Water in Root Zone")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Soil Water (mm)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        
-        elif plot_option == "Drainage":
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(results_df['Date'], results_df['Daily_Drainage'], label="Daily Drainage")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Drainage (mm)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        
-        elif plot_option == "Root Depth":
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(results_df['Date'], results_df['Root_Depth (mm)'], label="Root Depth")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Depth (mm)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        
-        elif plot_option == "Yield" and 'Yield (ton/ha)' in results_df.columns:
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(results_df['Date'], results_df['Yield (ton/ha)'], label="Yield")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Yield (ton/ha)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        
-        elif plot_option == "Leaching" and 'Leaching (kg/ha)' in results_df.columns:
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(results_df['Date'], results_df['Leaching (kg/ha)'], label="Leaching")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Leaching (kg/ha)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        
-        elif plot_option == "NUE" and 'NUE (kg/ha)' in results_df.columns:
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(results_df['Date'], results_df['NUE (kg/ha)'], label="NUE")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("NUE (kg/ha)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        
-        elif plot_option == "Soil Profile Water" and show_soil_profile and soil_profile is not None:
-            st.subheader("Soil Profile Water Storage")
-            profile_df = pd.DataFrame(soil_profile)
-            st.dataframe(profile_df)
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.bar(profile_df['Layer'], profile_df['SW (mm)'], color='skyblue')
-            ax.set_xlabel("Soil Layer")
-            ax.set_ylabel("Soil Water (mm)")
-            ax.set_title("Water Storage per Soil Layer")
-            st.pyplot(fig)
+        st.markdown('<div class="sub-header">Graphs</div>', unsafe_allow_html=True)
+        with st.container():
+            plot_options = ["ETa Components", "Cumulative Metrics", "Soil Water Storage", "Drainage", "Root Depth"]
+            if 'Yield (ton/ha)' in results_df.columns:
+                plot_options.append("Yield")
+            if 'Leaching (kg/ha)' in results_df.columns:
+                plot_options.append("Leaching")
+            if 'NUE (kg/ha)' in results_df.columns:
+                plot_options.append("NUE")
+            if show_soil_profile and soil_profile is not None:
+                plot_options.append("Soil Profile Water")
+            
+            plot_option = st.selectbox("Select Graph to Display", plot_options)
+            
+            if plot_option == "ETa Components":
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.plot(results_df['Date'], results_df['ETa_transp (mm)'], label="Transpiration")
+                ax.plot(results_df['Date'], results_df['ETa_evap (mm)'], label="Evaporation")
+                ax.plot(results_df['Date'], results_df['ETc (mm)'], label="ETc")
+                ax.set_xlabel("Date")
+                ax.set_ylabel("ET (mm)")
+                ax.legend()
+                ax.grid(True)
+                st.pyplot(fig)
+            
+            elif plot_option == "Cumulative Metrics":
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.plot(results_df['Date'], results_df['Cumulative_Irrigation (mm)'], label="Cumulative Irrigation")
+                ax.plot(results_df['Date'], results_df['Cumulative_Precip (mm)'], label="Cumulative Precipitation")
+                ax.set_xlabel("Date")
+                ax.set_ylabel("Cumulative (mm)")
+                ax.legend()
+                ax.grid(True)
+                st.pyplot(fig)
+            
+            elif plot_option == "Soil Water Storage":
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.plot(results_df['Date'], results_df['SW_root (mm)'], label="Soil Water in Root Zone")
+                ax.set_xlabel("Date")
+                ax.set_ylabel("Soil Water (mm)")
+                ax.legend()
+                ax.grid(True)
+                st.pyplot(fig)
+            
+            elif plot_option == "Drainage":
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.plot(results_df['Date'], results_df['Daily_Drainage'], label="Daily Drainage")
+                ax.set_xlabel("Date")
+                ax.set_ylabel("Drainage (mm)")
+                ax.legend()
+                ax.grid(True)
+                st.pyplot(fig)
+            
+            elif plot_option == "Root Depth":
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.plot(results_df['Date'], results_df['Root_Depth (mm)'], label="Root Depth")
+                ax.set_xlabel("Date")
+                ax.set_ylabel("Depth (mm)")
+                ax.legend()
+                ax.grid(True)
+                st.pyplot(fig)
+            
+            elif plot_option == "Yield" and 'Yield (ton/ha)' in results_df.columns:
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.plot(results_df['Date'], results_df['Yield (ton/ha)'], label="Yield")
+                ax.set_xlabel("Date")
+                ax.set_ylabel("Yield (ton/ha)")
+                ax.legend()
+                ax.grid(True)
+                st.pyplot(fig)
+            
+            elif plot_option == "Leaching" and 'Leaching (kg/ha)' in results_df.columns:
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.plot(results_df['Date'], results_df['Leaching (kg/ha)'], label="Leaching")
+                ax.set_xlabel("Date")
+                ax.set_ylabel("Leaching (kg/ha)")
+                ax.legend()
+                ax.grid(True)
+                st.pyplot(fig)
+            
+            elif plot_option == "NUE" and 'NUE (kg/ha)' in results_df.columns:
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.plot(results_df['Date'], results_df['NUE (kg/ha)'], label="NUE")
+                ax.set_xlabel("Date")
+                ax.set_ylabel("NUE (kg/ha)")
+                ax.legend()
+                ax.grid(True)
+                st.pyplot(fig)
+            
+            elif plot_option == "Soil Profile Water" and show_soil_profile and soil_profile is not None:
+                st.markdown('<div class="sub-header">Soil Profile Water Storage</div>', unsafe_allow_html=True)
+                profile_df = pd.DataFrame(soil_profile)
+                st.dataframe(profile_df)
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.bar(profile_df['Layer'], profile_df['SW (mm)'], color='skyblue')
+                ax.set_xlabel("Soil Layer")
+                ax.set_ylabel("Soil Water (mm)")
+                ax.set_title("Water Storage per Soil Layer")
+                st.pyplot(fig)
     else:
-        st.info("Please complete the setup and click 'Run Simulation' to see results.")
+        st.info("Please complete the setup and click 'Run Simulation' to view results.")
+
+# Footer
+st.markdown('<div class="footer">© 2025 AgriWaterBalance | Contact: support@agriwaterbalance.com</div>', unsafe_allow_html=True)
