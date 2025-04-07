@@ -18,18 +18,36 @@ session.mount('https://', HTTPAdapter(max_retries=retries))
 # App Configuration
 st.set_page_config(page_title="AgriWaterBalance", layout="wide")
 
-# Custom CSS for Professional Look
+# Custom CSS for Professional Look including Header modifications
 st.markdown("""
     <style>
-    .main-header {
+    /* Remove default body margin */
+    body {
+        margin: 0;
+        padding: 0;
+    }
+    /* Header container styling */
+    .header-container {
+        position: relative;
         background-color: #1E3A8A;
-        color: white;
-        padding: 20px;
+        padding: 20px 20px;
         border-radius: 5px;
-        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 0; /* no white space above header */
+    }
+    .header-logo {
+        position: absolute;
+        left: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    .header-title {
+        color: white;
         font-size: 36px;
         font-weight: bold;
-        margin-bottom: 20px;
+        text-align: center;
     }
     .sub-header {
         color: #1E3A8A;
@@ -426,11 +444,17 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
             st.warning(f"Failed to fetch historical weather data: {e}")
             return None
 
-# User Interface
-col1, col2, col3 = st.columns(3)
-with col2:
-    st.image("logo.png", width=200)
-st.markdown('<div class="main-header">AgriWaterBalance</div>', unsafe_allow_html=True)
+# User Interface - Custom Header with Logo on the Left and Title Centered
+st.markdown("""
+    <div class="header-container">
+        <div class="header-logo">
+            <img src="logo.png" width="80">
+        </div>
+        <div class="header-title">
+            AgriWaterBalance
+        </div>
+    </div>
+""", unsafe_allow_html=True)
 st.markdown("**A Professional Tool for Soil Water Management**", unsafe_allow_html=True)
 
 # Navigation Tabs
