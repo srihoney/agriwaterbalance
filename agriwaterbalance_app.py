@@ -58,7 +58,7 @@ def compute_ETc(Kcb, Ks, Kr, Ke, ET0):
     return (Kcb * Ks + Kr * Ke) * ET0
 
 def interpolate_crop_stages(crop_df, total_days):
-    kcb_list, root_list, p_list, ke_list = [], [], [], []
+    kcb_list, RD_list, p_list, ke_list = [], [], [], []
     for i in range(len(crop_df)):
         row = crop_df.iloc[i]
         start, end = row['Start_Day'], row['End_Day']
@@ -68,24 +68,29 @@ def interpolate_crop_stages(crop_df, total_days):
             if i > 0:
                 prev = crop_df.iloc[i - 1]
                 kcb = prev['Kcb'] + frac * (row['Kcb'] - prev['Kcb'])
-                root = prev['Root_Depth_mm'] + frac * (row['Root_Depth_mm'] - prev['Root_Depth_mm'])
+                rd = prev['Root_Depth_mm'] + frac * (row['Root_Depth_mm'] - prev['Root_Depth_mm'])
                 p = prev['p'] + frac * (row['p'] - prev['p'])
                 ke = prev['Ke'] + frac * (row['Ke'] - prev['Ke'])
             else:
-                kcb, root, p, ke = row['Kcb'], row['Root_Depth_mm'], row['p'], row['Ke']
+                kcb, rd, p, ke = row['Kcb'], row['Root_Depth_mm'], row['p'], row['Ke']
             kcb_list.append(kcb)
-            root_list.append(root)
+            RD_list.append(rd)
             p_list.append(p)
             ke_list.append(ke)
-    return kcb_list[:total_days], root_list[:total_days], p_list[:total_days], ke_list[:total_days]
+    return kcb_list[:total_days], RD_list[:total_days], p_list[:total_days], ke_list[:total_days]
 
 def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False, 
               use_fao33=False, Ym=0, Ky=0, use_transp=False, WP_yield=0, 
               enable_leaching=False, leaching_method="", nitrate_conc=0, 
-              total_N_input=0, leaching_fraction=0):
+              total_N_input=0, leaching_fraction=0,
+              dynamic_root_growth=False, initial_root_depth=None, max_root_depth=None, days_to_max=None,
+              return_soil_profile=False):
     days = len(weather_df)
     profile_depth = soil_df['Depth_mm'].sum()
-    Kcb_list, RD_list, p_list, Ke_list = interpolate_crop_stages(crop_df, days)
+    Kcb_list, RD_list, p_list, ke_list = interpolate_crop_stages(crop_df, days)
+    # Override Root Depth values if dynamic root growth is enabled
+    if dynamic_root_growth and initial_root_depth is not None and max_root_depth is not None and days_to_max is not None:
+        RD_list = [initial_root_depth + (max_root_depth - initial_root_depth) * min(1, (i+1)/days_to_max) for i in range(days)]
     TEW, REW = soil_df.iloc[0]['TEW'], soil_df.iloc[0]['REW']
     SW_surface = TEW
     SW_layers = [row['FC'] * row['Depth_mm'] for _, row in soil_df.iterrows()]
@@ -94,10 +99,12 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
     cum_transp = 0
     cum_evap = 0
     results = []
+    # To compute daily drainage for salinity risk
+    previous_drain = 0
     for i in range(days):
         row = weather_df.iloc[i]
         ET0, P, I = row['ET0'], row['Precipitation'], row['Irrigation']
-        Kcb, RD, p, Ke = Kcb_list[i], min(RD_list[i], profile_depth), p_list[i], Ke_list[i]
+        Kcb, RD, p, Ke = Kcb_list[i], min(RD_list[i], profile_depth), p_list[i], ke_list[i]
         cum_P += P
         cum_Irr += I
         FC_total = WP_total = SW_root = 0.0
@@ -123,6 +130,11 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
         cum_evap += ETa_evap
         if Ks < 1.0:
             stress_days += 1
+        
+        # --- Enhancement 1: Irrigation Scheduling Recommendation ---
+        RAW = p * TAW
+        recommended_irrigation = (depletion - RAW) if depletion > RAW else 0
+
         SW_surface += P + I
         excess_surface = max(0, SW_surface - TEW)
         SW_surface = max(0, SW_surface - ETa_evap)
@@ -153,6 +165,7 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
             "Root_Depth (mm)": RD,
             "Depletion (mm)": depletion,
             "TAW (mm)": TAW,
+            "Recommended_Irrigation (mm)": recommended_irrigation,
             "Cumulative_ETc (mm)": cum_ETc,
             "Cumulative_ETa (mm)": cum_ETa,
             "Cumulative_Transp (mm)": cum_transp,
@@ -163,6 +176,14 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
             "Stress_Days": stress_days
         })
     results_df = pd.DataFrame(results)
+    # --- Enhancement 5: Soil Water Deficit / Stress Risk Alerts ---
+    results_df['SWC (%)'] = (results_df['SW_root (mm)'] / results_df['Root_Depth (mm)']) * 100
+    results_df['Stress_Risk'] = np.where((results_df['Ks'] < 0.5) | (results_df['SWC (%)'] < 50), "Alert", "Normal")
+    # --- Enhancement 9: Drainage Salinity Risk Indicator ---
+    results_df['Daily_Drainage'] = results_df['Cumulative_Drainage (mm)'].diff().fillna(results_df['Cumulative_Drainage (mm)'])
+    # salinity_threshold will be provided in the sidebar (mm)
+    # For now, leave the column and it will be flagged later in post processing.
+    # --- Yield Estimation ---
     if enable_yield:
         if use_fao33:
             ETc_total = results_df['ETc (mm)'].sum()
@@ -179,7 +200,25 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drain=True, enable_yield=False
         elif leaching_method == "Method 2: Leaching Fraction × total N input":
             leaching = leaching_fraction * total_N_input
             results_df['Leaching (kg/ha)'] = leaching
-    return results_df
+    # --- Enhancement 3: Nitrogen Use Efficiency (NUE) Estimation ---
+    if enable_yield and total_N_input > 0:
+        results_df['NUE (kg/ha)'] = results_df['Yield (ton/ha)'] / total_N_input
+    # --- Enhancement 4: Water Productivity (WP) Metrics ---
+    if enable_yield:
+        results_df['WP_ET'] = results_df['Yield (ton/ha)'] / results_df['ETa_total (mm)'].replace(0, np.nan)
+        results_df['WP_Irrigation'] = results_df['Yield (ton/ha)'] / results_df['Cumulative_Irrigation (mm)'].replace(0, np.nan)
+        
+    if return_soil_profile:
+        final_soil_profile = []
+        for j, soil in soil_df.iterrows():
+            final_soil_profile.append({
+                "Layer": j,
+                "Depth_mm": soil['Depth_mm'],
+                "SW (mm)": SW_layers[j]
+            })
+        return results_df, final_soil_profile
+    else:
+        return results_df
 
 # -------------------
 # Data Fetching Functions
@@ -291,356 +330,294 @@ def fetch_soil_data(lat, lon):
             st.warning(f"Soil data fetch failed: {str(e)[:100]}... Using default values.")
             return default_soil_df
 
-def fetch_ndvi_data(study_area, start_date, end_date):
-    return 0.6
-
-def get_crop_data(ndvi, num_days):
-    kcb = 0.1 + 1.1 * ndvi
-    crop_df = pd.DataFrame({
-        "Start_Day": [1],
-        "End_Day": [num_days],
-        "Kcb": [kcb],
-        "Root_Depth_mm": [300],
-        "p": [0.5],
-        "Ke": [1.0]
-    })
-    return crop_df
-
-def create_grid_in_polygon(polygon, spacing=0.01):
-    gdf = gpd.GeoDataFrame(geometry=[polygon], crs="EPSG:4326")
-    utm_crs = gdf.estimate_utm_crs()
-    gdf_utm = gdf.to_crs(utm_crs)
-    polygon_utm = gdf_utm.iloc[0].geometry
-    bounds = polygon_utm.bounds
-    spacing_m = spacing * 1000
-    x_coords = np.arange(bounds[0], bounds[2], spacing_m)
-    y_coords = np.arange(bounds[1], bounds[3], spacing_m)
-    grid_points = []
-    for x in x_coords:
-        for y in y_coords:
-            pt = Point(x, y)
-            if polygon_utm.contains(pt):
-                pt_lonlat = gpd.GeoSeries([pt], crs=utm_crs).to_crs("EPSG:4326").iloc[0]
-                grid_points.append(pt_lonlat)
-    return grid_points
-
-def calculate_polygon_area_ha(polygon):
-    gdf = gpd.GeoDataFrame(geometry=[polygon], crs="EPSG:4326")
-    utm_crs = gdf.estimate_utm_crs()
-    gdf_utm = gdf.to_crs(utm_crs)
-    area_m2 = gdf_utm.area[0]
-    area_ha = area_m2 / 10000
-    return area_ha
-
 # -------------------
-# New Functions for Daily Spatial Output
-# -------------------
-def create_fishnet(polygon, cell_size_m=100):
-    """
-    Create a fishnet (grid of small polygons) covering the given polygon.
-    The polygon is assumed to be in EPSG:4326; it is first projected to an estimated UTM.
-    """
-    gdf = gpd.GeoDataFrame({'geometry':[polygon]}, crs="EPSG:4326")
-    utm_crs = gdf.estimate_utm_crs()
-    gdf_utm = gdf.to_crs(utm_crs)
-    poly_utm = gdf_utm.geometry.iloc[0]
-    minx, miny, maxx, maxy = poly_utm.bounds
-    cells = []
-    x = minx
-    while x < maxx:
-        y = miny
-        while y < maxy:
-            cell = Polygon([(x, y), (x+cell_size_m, y), (x+cell_size_m, y+cell_size_m), (x, y+cell_size_m)])
-            if poly_utm.intersects(cell):
-                cells.append(cell.intersection(poly_utm))
-            y += cell_size_m
-        x += cell_size_m
-    fishnet = gpd.GeoDataFrame({'geometry': cells}, crs=utm_crs)
-    fishnet = fishnet.to_crs("EPSG:4326")
-    return fishnet
-
-def interpolate_to_fishnet(fishnet, points_df, value_col):
-    """
-    Given a fishnet GeoDataFrame and a DataFrame of points with columns 'lon', 'lat' and value_col,
-    interpolate the values (using linear griddata interpolation) to the centroids of the fishnet cells.
-    """
-    # Compute centroids
-    fishnet = fishnet.copy()
-    fishnet["centroid"] = fishnet.geometry.centroid
-    fishnet["lon"] = fishnet.centroid.x
-    fishnet["lat"] = fishnet.centroid.y
-    coords = points_df[['lon', 'lat']].values
-    values = points_df[value_col].values
-    fishnet_coords = fishnet[['lon', 'lat']].values
-    interpolated_values = griddata(coords, values, fishnet_coords, method='linear')
-    fishnet[value_col] = interpolated_values
-    return fishnet.drop(columns=["centroid", "lon", "lat"])
-
-# -------------------
-# User Interface
+# User Interface - NORMAL MODE ONLY (Spatial mode removed)
 # -------------------
 st.title("AgriWaterBalance")
-st.markdown("**Spatiotemporal Soil Water Balance Modeling**")
-mode = st.radio("Operation Mode:", ["Normal Mode", "Spatial Mode"], horizontal=True)
+st.markdown("**Soil Water Balance Modeling with Enhanced Features**")
 
-# ========= NORMAL MODE =========
-if mode == "Normal Mode":
-    with st.sidebar:
-        st.header("Upload Input Files (.txt)")
-        weather_file = st.file_uploader("Weather Data (.txt)", type="txt")
+with st.sidebar:
+    st.header("Upload Input Files (.txt)")
+    weather_file = st.file_uploader("Weather Data (.txt)", type="txt")
+    # For crop stage data, let the user choose between file upload and a crop template.
+    crop_input_method = st.selectbox("Crop Stage Input Method", ["Use Uploaded File", "Maize", "Wheat", "Soybean", "Rice", "Almond", "Tomato", "Custom"])
+    if crop_input_method == "Use Uploaded File":
         crop_file = st.file_uploader("Crop Stage Data (.txt)", type="txt")
-        soil_file = st.file_uploader("Soil Layers (.txt)", type="txt")
-        st.header("Options")
-        show_monthly_summary = st.checkbox("Show Monthly Summary", value=True)
-        track_drainage = st.checkbox("Track Drainage", value=True)
-        st.header("Yield Estimation")
-        enable_yield = st.checkbox("Enable Yield Estimation", value=False)
-        if enable_yield:
-            st.subheader("Select Methods")
-            use_fao33 = st.checkbox("Use FAO-33 Ky-based method", value=True)
-            use_transp = st.checkbox("Use Transpiration-based method", value=False)
-            if use_fao33:
-                Ym = st.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1)
-                Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
-            if use_transp:
-                WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
-        st.header("Leaching Estimation")
-        enable_leaching = st.checkbox("Enable Leaching Estimation", value=False)
-        if enable_leaching:
-            leaching_method = st.radio("Select Leaching Method", [
-                "Method 1: Drainage × nitrate concentration",
-                "Method 2: Leaching Fraction × total N input"
-            ])
-            if leaching_method == "Method 1: Drainage × nitrate concentration":
-                nitrate_conc = st.number_input("Nitrate Concentration (mg/L)", min_value=0.0, value=10.0, step=0.1)
-            elif leaching_method == "Method 2: Leaching Fraction × total N input":
-                total_N_input = st.number_input("Total N Input (kg/ha)", min_value=0.0, value=100.0, step=1.0)
-                leaching_fraction = st.number_input("Leaching Fraction (0-1)", min_value=0.0, max_value=1.0, value=0.1, step=0.01)
-        run_button = st.button("🚀 Run Simulation")
-    if run_button and weather_file and crop_file and soil_file:
-        with st.spinner("Running simulation..."):
-            try:
-                weather_df = pd.read_csv(weather_file, parse_dates=['Date'])
-                crop_df = pd.read_csv(crop_file)
-                soil_df = pd.read_csv(soil_file)
-                results_df = SIMdualKc(
-                    weather_df, crop_df, soil_df, track_drainage,
-                    enable_yield=enable_yield,
-                    use_fao33=use_fao33 if enable_yield else False,
-                    Ym=Ym if enable_yield else 0,
-                    Ky=Ky if enable_yield else 0,
-                    use_transp=use_transp if enable_yield else False,
-                    WP_yield=WP_yield if enable_yield else 0,
-                    enable_leaching=enable_leaching,
-                    leaching_method=leaching_method if enable_leaching else "",
-                    nitrate_conc=nitrate_conc if enable_leaching and leaching_method=="Method 1: Drainage × nitrate concentration" else 0,
-                    total_N_input=total_N_input if enable_leaching and leaching_method=="Method 2: Leaching Fraction × total N input" else 0,
-                    leaching_fraction=leaching_fraction if enable_leaching and leaching_method=="Method 2: Leaching Fraction × total N input" else 0
-                )
-                results_df['SWC (%)'] = (results_df['SW_root (mm)'] / results_df['Root_Depth (mm)']) * 100
-                st.success("Simulation completed successfully!")
-                tab1, tab2, tab3, tab4 = st.tabs(["📄 Daily Results", "📈 ET Graphs", "💧 Storage", "🌾 Yield and Leaching"])
-                with tab1:
-                    st.dataframe(results_df)
-                    csv = results_df.to_csv(index=False)
-                    st.download_button("📥 Download Results (.txt)", csv, file_name="results.txt")
-                with tab2:
-                    fig, ax = plt.subplots()
-                    ax.plot(results_df['Date'], results_df['ETa_transp (mm)'], label='Transpiration')
-                    ax.plot(results_df['Date'], results_df['ETa_evap (mm)'], label='Evaporation')
-                    ax.plot(results_df['Date'], results_df['ETc (mm)'], label='ETc')
-                    ax.set_ylabel("ET (mm)")
-                    ax.legend()
-                    ax.grid(True)
-                    st.pyplot(fig)
-                with tab3:
+    else:
+        crop_file = None  # Will generate from template below
+    soil_file = st.file_uploader("Soil Layers (.txt)", type="txt")
+    
+    st.header("Options")
+    show_monthly_summary = st.checkbox("Show Monthly Summary", value=True)
+    track_drainage = st.checkbox("Track Drainage", value=True)
+    
+    st.header("Yield Estimation")
+    enable_yield = st.checkbox("Enable Yield Estimation", value=False)
+    if enable_yield:
+        st.subheader("Select Methods")
+        use_fao33 = st.checkbox("Use FAO-33 Ky-based method", value=True)
+        use_transp = st.checkbox("Use Transpiration-based method", value=False)
+        if use_fao33:
+            Ym = st.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1)
+            Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
+        if use_transp:
+            WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
+    else:
+        use_fao33 = use_transp = Ym = Ky = WP_yield = 0
+
+    st.header("Leaching Estimation")
+    enable_leaching = st.checkbox("Enable Leaching Estimation", value=False)
+    if enable_leaching:
+        leaching_method = st.radio("Select Leaching Method", [
+            "Method 1: Drainage × nitrate concentration",
+            "Method 2: Leaching Fraction × total N input"
+        ])
+        if leaching_method == "Method 1: Drainage × nitrate concentration":
+            nitrate_conc = st.number_input("Nitrate Concentration (mg/L)", min_value=0.0, value=10.0, step=0.1)
+            total_N_input = 0  # Not used in this method
+            leaching_fraction = 0
+        elif leaching_method == "Method 2: Leaching Fraction × total N input":
+            total_N_input = st.number_input("Total N Input (kg/ha)", min_value=0.0, value=100.0, step=1.0)
+            leaching_fraction = st.number_input("Leaching Fraction (0-1)", min_value=0.0, max_value=1.0, value=0.1, step=0.01)
+            nitrate_conc = 0
+    else:
+        leaching_method = ""
+        nitrate_conc = total_N_input = leaching_fraction = 0
+
+    st.header("Additional Features")
+    enable_forecast = st.checkbox("Enable Forecast Integration", value=False)
+    enable_nue = st.checkbox("Enable NUE Estimation", value=False)
+    enable_dynamic_root = st.checkbox("Enable Dynamic Root Growth", value=False)
+    if enable_dynamic_root:
+        initial_root_depth = st.number_input("Initial Root Depth (mm)", min_value=50, value=300, step=10)
+        max_root_depth = st.number_input("Maximum Root Depth (mm)", min_value=50, value=1000, step=10)
+        days_to_max = st.number_input("Days to Reach Maximum Root Depth", min_value=1, value=60, step=1)
+    else:
+        initial_root_depth = max_root_depth = days_to_max = None
+
+    enable_multiseason = st.checkbox("Enable Multi-Season Simulation", value=False)
+    season_breaks_str = ""
+    if enable_multiseason:
+        season_breaks_str = st.text_input("Enter season break dates (YYYY-MM-DD) separated by commas", value="")
+    salinity_threshold = st.number_input("Excessive Drainage Threshold (mm)", min_value=0.0, value=10.0, step=1.0)
+    show_soil_profile = st.checkbox("Show Soil Profile Water Storage Visualization", value=False)
+    
+    st.header("Graph Enhancements")
+    graph_vars = st.multiselect("Select Variables to Plot", 
+                                options=["ETa_transp (mm)", "ETa_evap (mm)", "ETc (mm)", "SW_root (mm)"],
+                                default=["ETa_transp (mm)", "ETa_evap (mm)", "ETc (mm)"])
+    y_axis_limit = st.number_input("Y-axis Upper Limit (for graphs)", min_value=0.0, value=50.0, step=1.0)
+    st.header("Comparison Run (Optional)")
+    comp_file = st.file_uploader("Upload Comparison Run Results (.txt)", type="txt")
+    
+    run_button = st.button("🚀 Run Simulation")
+
+# ----------- Generate Crop Data -----------
+if crop_input_method == "Use Uploaded File":
+    # Use the uploaded file if available
+    if crop_file:
+        crop_df = pd.read_csv(crop_file)
+    else:
+        crop_df = None
+else:
+    # Use a template based on the selected crop type
+    # Default values for demonstration purposes
+    templates = {
+        "Maize": {"Kcb": 1.2, "Root_Depth_mm": 1500, "p": 0.55, "Ke": 0.7},
+        "Wheat": {"Kcb": 1.1, "Root_Depth_mm": 1200, "p": 0.5, "Ke": 0.6},
+        "Soybean": {"Kcb": 1.0, "Root_Depth_mm": 1000, "p": 0.5, "Ke": 0.7},
+        "Rice": {"Kcb": 1.3, "Root_Depth_mm": 800, "p": 0.2, "Ke": 1.0},
+        "Almond": {"Kcb": 0.9, "Root_Depth_mm": 1000, "p": 0.45, "Ke": 0.8},
+        "Tomato": {"Kcb": 1.0, "Root_Depth_mm": 900, "p": 0.5, "Ke": 0.75},
+        "Custom": {"Kcb": 1.0, "Root_Depth_mm": 1000, "p": 0.5, "Ke": 1.0}
+    }
+    template = templates.get(crop_input_method, templates["Custom"])
+    # Create a DataFrame for the entire simulation period (will be overwritten later if multi-season)
+    # Here we assume a single stage from day 1 to N (N will be defined from weather data)
+    # Allow the user to edit the template values using experimental data editor
+    crop_df = pd.DataFrame({
+        "Start_Day": [1],
+        "End_Day": [100],  # Temporary – will be adjusted based on weather data length
+        "Kcb": [template["Kcb"]],
+        "Root_Depth_mm": [template["Root_Depth_mm"]],
+        "p": [template["p"]],
+        "Ke": [template["Ke"]]
+    })
+    st.subheader("Edit Crop Stage Template")
+    crop_df = st.experimental_data_editor(crop_df, num_rows="dynamic")
+
+# ----------- Run Simulation -----------
+if run_button and weather_file and (crop_df is not None) and soil_file:
+    with st.spinner("Running simulation..."):
+        try:
+            weather_df = pd.read_csv(weather_file, parse_dates=['Date'])
+            soil_df = pd.read_csv(soil_file)
+            # Adjust crop_df end day to match weather_df length if necessary
+            total_days = len(weather_df)
+            crop_df.loc[crop_df.index[0], "End_Day"] = total_days
+
+            # If multi-season is enabled, split weather_df into segments
+            if enable_multiseason and season_breaks_str.strip():
+                season_breaks = sorted([datetime.datetime.strptime(d.strip(), "%Y-%m-%d") 
+                                          for d in season_breaks_str.split(",") if d.strip()])
+                seasons = []
+                start_date = weather_df['Date'].min()
+                season_number = 1
+                for b in season_breaks:
+                    season_df = weather_df[(weather_df['Date'] >= start_date) & (weather_df['Date'] <= b)]
+                    if not season_df.empty:
+                        season_df = season_df.copy()
+                        season_df['Season'] = season_number
+                        seasons.append(season_df)
+                        season_number += 1
+                    start_date = b + datetime.timedelta(days=1)
+                # Last season
+                season_df = weather_df[weather_df['Date'] >= start_date].copy()
+                if not season_df.empty:
+                    season_df['Season'] = season_number
+                    seasons.append(season_df)
+                # Run simulation for each season and combine results
+                results_list = []
+                soil_profiles_list = []
+                for s in seasons:
+                    # Adjust crop_df for the season length
+                    season_days = len(s)
+                    crop_df.loc[crop_df.index[0], "End_Day"] = season_days
+                    if show_soil_profile:
+                        res, soil_profile = SIMdualKc(s, crop_df, soil_df, track_drain, enable_yield,
+                                                   use_fao33, Ym, Ky, use_transp, WP_yield,
+                                                   enable_leaching, leaching_method, nitrate_conc,
+                                                   total_N_input, leaching_fraction,
+                                                   dynamic_root_growth=enable_dynamic_root,
+                                                   initial_root_depth=initial_root_depth,
+                                                   max_root_depth=max_root_depth,
+                                                   days_to_max=days_to_max,
+                                                   return_soil_profile=True)
+                        soil_profiles_list.append((s['Season'].iloc[0], soil_profile))
+                    else:
+                        res = SIMdualKc(s, crop_df, soil_df, track_drain, enable_yield,
+                                                   use_fao33, Ym, Ky, use_transp, WP_yield,
+                                                   enable_leaching, leaching_method, nitrate_conc,
+                                                   total_N_input, leaching_fraction,
+                                                   dynamic_root_growth=enable_dynamic_root,
+                                                   initial_root_depth=initial_root_depth,
+                                                   max_root_depth=max_root_depth,
+                                                   days_to_max=days_to_max)
+                    results_list.append(res)
+                results_df = pd.concat(results_list, ignore_index=True)
+            else:
+                results_df = SIMdualKc(weather_df, crop_df, soil_df, track_drain, enable_yield,
+                                        use_fao33, Ym, Ky, use_transp, WP_yield,
+                                        enable_leaching, leaching_method, nitrate_conc,
+                                        total_N_input, leaching_fraction,
+                                        dynamic_root_growth=enable_dynamic_root,
+                                        initial_root_depth=initial_root_depth,
+                                        max_root_depth=max_root_depth,
+                                        days_to_max=days_to_max,
+                                        return_soil_profile=show_soil_profile)
+            
+            # --- Enhancement 2: Forecast Integration ---
+            if enable_forecast:
+                et0_threshold = results_df["ET0 (mm)"].mean() * 1.2
+                results_df["High_ET_Forecast"] = results_df["ET0 (mm)"] > et0_threshold
+
+            # --- Enhancement 9: Drainage Salinity Risk Indicator ---
+            results_df['Salinity_Risk'] = np.where(results_df['Daily_Drainage'] > salinity_threshold, "Alert", "Normal")
+            
+            st.success("Simulation completed successfully!")
+            
+            # --- Tabs for Results ---
+            tab1, tab2, tab3, tab4 = st.tabs(["📄 Daily Results", "📈 Graphs", "💧 Irrigation & Metrics", "🌾 Yield & Leaching"])
+            with tab1:
+                st.dataframe(results_df)
+                csv = results_df.to_csv(index=False)
+                st.download_button("📥 Download Results (.txt)", csv, file_name="results.txt")
+                # Export irrigation recommendations separately if any are > 0
+                irr_sched = results_df[results_df["Recommended_Irrigation (mm)"] > 0]
+                if not irr_sched.empty:
+                    st.subheader("Irrigation Scheduling Recommendations")
+                    st.dataframe(irr_sched[["Date", "Recommended_Irrigation (mm)"]])
+                    csv2 = irr_sched.to_csv(index=False)
+                    st.download_button("📥 Download Irrigation Schedule", csv2, file_name="irrigation_schedule.txt")
+                    
+            with tab2:
+                fig, ax = plt.subplots()
+                for var in graph_vars:
+                    ax.plot(results_df['Date'], results_df[var], label=var)
+                ax.set_ylabel("Value (mm)")
+                ax.set_ylim(0, y_axis_limit)
+                ax.legend()
+                ax.grid(True)
+                st.pyplot(fig)
+                # If comparison run is provided, overlay the comparison
+                if comp_file:
+                    comp_df = pd.read_csv(comp_file, parse_dates=['Date'])
                     fig2, ax2 = plt.subplots()
-                    ax2.plot(results_df['Date'], results_df['SW_root (mm)'], label='Root Zone SW')
-                    ax2.set_ylabel("Soil Water (mm)")
+                    for var in graph_vars:
+                        ax2.plot(results_df['Date'], results_df[var], label=f"Run1: {var}")
+                        ax2.plot(comp_df['Date'], comp_df[var], label=f"Run2: {var}", linestyle="--")
+                    ax2.set_ylabel("Value (mm)")
+                    ax2.set_ylim(0, y_axis_limit)
                     ax2.legend()
                     ax2.grid(True)
                     st.pyplot(fig2)
-                with tab4:
-                    if enable_yield and 'Yield (ton/ha)' in results_df.columns:
-                        st.write("### Yield Estimation")
-                        st.write(results_df[['Date', 'Yield (ton/ha)']])
-                    if enable_leaching and 'Leaching (kg/ha)' in results_df.columns:
-                        st.write("### Leaching Estimation")
-                        st.write(results_df[['Date', 'Leaching (kg/ha)']])
-                if show_monthly_summary:
-                    st.subheader("📆 Monthly Summary")
-                    monthly = results_df.copy()
-                    monthly['Month'] = monthly['Date'].dt.to_period('M')
-                    summary = monthly.groupby('Month').agg({
-                        'ET0 (mm)': 'mean',
-                        'ETc (mm)': 'mean',
-                        'ETa_transp (mm)': 'mean',
-                        'ETa_evap (mm)': 'mean',
-                        'Cumulative_Irrigation (mm)': 'max',
-                        'Cumulative_Precip (mm)': 'max',
-                        'Stress_Days': 'max'
-                    }).reset_index()
-                    st.dataframe(summary)
-            except Exception as e:
-                st.error(f"⚠️ Simulation failed: {e}")
-    else:
-        st.info("📂 Please upload all required files and click 'Run Simulation'.")
-
-# ========= SPATIAL MODE =========
-elif mode == "Spatial Mode":
-    st.markdown("### 🌍 Spatial Analysis Mode")
-    with st.sidebar:
-        st.header("Spatial and Crop Parameters")
-        spacing = st.slider("Grid spacing (km)", 0.1, 5.0, 1.0)
-        cell_size_m = st.number_input("Fishnet Cell Size (m)", min_value=10, max_value=500, value=100, step=10)
-        start_date = st.date_input("Start date", datetime.date.today() - datetime.timedelta(days=30))
-        end_date = st.date_input("End date", datetime.date.today())
-        st.markdown("### Crop Parameters")
-        crop_type = st.selectbox("Crop Type", ["Custom", "Maize", "Wheat", "Soybean", "Rice"])
-        if crop_type == "Custom":
-            kcb = st.slider("Basal Crop Coefficient (Kcb)", 0.1, 1.5, 1.0, 0.05)
-            root_depth = st.slider("Root Depth (mm)", 100, 2000, 1000, 100)
-            p_factor = st.slider("Depletion Factor (p)", 0.1, 0.8, 0.5, 0.05)
-            ke_factor = st.slider("Evaporation Coefficient (Ke)", 0.1, 1.2, 0.8, 0.05)
-        else:
-            if crop_type == "Maize":
-                kcb, root_depth, p_factor, ke_factor = 1.2, 1500, 0.55, 0.7
-            elif crop_type == "Wheat":
-                kcb, root_depth, p_factor, ke_factor = 1.1, 1200, 0.5, 0.6
-            elif crop_type == "Soybean":
-                kcb, root_depth, p_factor, ke_factor = 1.0, 1000, 0.5, 0.7
-            elif crop_type == "Rice":
-                kcb, root_depth, p_factor, ke_factor = 1.3, 800, 0.2, 1.0
-        st.markdown("### Output Options")
-        output_variable = st.selectbox(
-            "Select Primary Output Variable", 
-            ["Evaporation", "Transpiration", "Evapotranspiration", "Soil Water Content"]
-        )
-    # Draw polygon using folium
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        m = folium.Map(location=[40, -100], zoom_start=4, tiles="Esri.WorldImagery")
-        Draw(export=True, draw_options={"polygon": True, "marker": False, "circlemarker": False}).add_to(m)
-        map_data = st_folium(m, key="spatial_map", height=600)
-    with col2:
-        st.info("Draw your field polygon on the map and then click 'Run Spatial Analysis'.")
-    if st.button("🚀 Run Spatial Analysis"):
-        if map_data and map_data.get("all_drawings"):
-            try:
-                shapes = [shape(d["geometry"]) for d in map_data["all_drawings"] if d["geometry"]["type"] == "Polygon"]
-                if not shapes:
-                    st.error("No polygon drawn.")
-                    st.stop()
-                # Combine drawn polygons into one study area
-                study_area = gpd.GeoSeries(shapes).unary_union
-                polygon_area_ha = calculate_polygon_area_ha(study_area)
-                st.markdown("### Your Field Boundary")
-                st.write(f"Field Area: {polygon_area_ha:.2f} hectares")
-                # Create sample grid points within the polygon
-                grid_points = create_grid_in_polygon(study_area, spacing=spacing)
-                if not grid_points:
-                    st.warning("No grid points generated! Check your polygon and spacing.")
-                    st.stop()
-                st.write(f"Generated {len(grid_points)} sample points within the field.")
-                grid_gdf = gpd.GeoDataFrame(geometry=grid_points, crs="EPSG:4326")
-                grid_gdf["lat"] = grid_gdf.geometry.y
-                grid_gdf["lon"] = grid_gdf.geometry.x
-                st.map(grid_gdf[["lat", "lon"]])
-                
-                st.subheader("Running Daily Simulations at Grid Points")
-                point_results_all = []
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                # Get centroid for weather data
-                centroid = study_area.centroid
-                centroid_lat, centroid_lon = centroid.y, centroid.x
-                centroid_weather = fetch_weather_data(centroid_lat, centroid_lon, start_date, end_date)
-                if centroid_weather is None:
-                    st.error("Failed to fetch weather data for the field centroid.")
-                    st.stop()
-                # For each grid point, run the water balance simulation (daily outputs)
-                for i, point in enumerate(grid_points):
-                    lat_pt, lon_pt = point.y, point.x
-                    status_text.text(f"Processing point {i+1} of {len(grid_points)} ({lat_pt:.4f}, {lon_pt:.4f})")
-                    weather = centroid_weather.copy()
-                    soil = fetch_soil_data(lat_pt, lon_pt)
-                    crop = pd.DataFrame({
-                        "Start_Day": [1],
-                        "End_Day": [len(weather)],
-                        "Kcb": [kcb],
-                        "Root_Depth_mm": [root_depth],
-                        "p": [p_factor],
-                        "Ke": [ke_factor]
-                    })
-                    if soil is not None:
-                        result = SIMdualKc(weather, crop, soil)
-                        result['lat'] = lat_pt
-                        result['lon'] = lon_pt
-                        point_results_all.append(result)
-                    else:
-                        st.warning(f"Skipping point ({lat_pt:.4f}, {lon_pt:.4f}) due to missing soil data.")
-                    progress_bar.progress((i+1)/len(grid_points))
-                if not point_results_all:
-                    st.error("No simulation results generated!")
-                    st.stop()
-                # Combine daily results for all points into one DataFrame
-                all_results_df = pd.concat(point_results_all)
-                # Determine the output variable column based on user selection
-                if output_variable == "Evaporation":
-                    value_col = "ETa_evap (mm)"
-                elif output_variable == "Transpiration":
-                    value_col = "ETa_transp (mm)"
-                elif output_variable == "Evapotranspiration":
-                    value_col = "ETa_total (mm)"
-                else:
-                    value_col = "SW_root (mm)"
-                
-                st.subheader("Interpolating to Create Daily Spatial Outputs")
-                # Create a fishnet (grid) covering the study area using the specified cell size
-                fishnet = create_fishnet(study_area, cell_size_m=cell_size_m)
-                daily_gdfs = []
-                unique_dates = sorted(all_results_df['Date'].unique())
-                for d in unique_dates:
-                    points_day = all_results_df[all_results_df['Date'] == d][['lon', 'lat', value_col]]
-                    # Interpolate simulation values from grid points to fishnet cells
-                    fishnet_day = interpolate_to_fishnet(fishnet.copy(), points_day, value_col)
-                    fishnet_day['Date'] = d
-                    daily_gdfs.append(fishnet_day)
-                daily_spatial_gdf = gpd.GeoDataFrame(pd.concat(daily_gdfs), crs="EPSG:4326")
-                
-                # Allow the user to select a day to visualize
-                st.subheader("Visualize Daily Spatial Output")
-                selected_date = st.selectbox("Select Date", unique_dates)
-                selected_gdf = daily_spatial_gdf[daily_spatial_gdf['Date'] == selected_date]
-                
-                # Create a folium map with choropleth display using a color scale
-                m_daily = folium.Map(location=[study_area.centroid.y, study_area.centroid.x], zoom_start=12, tiles="CartoDB positron")
-                # Create a colormap
-                min_val = float(selected_gdf[value_col].min())
-                max_val = float(selected_gdf[value_col].max())
-                colormap = branca.colormap.LinearColormap(colors=['blue', 'green', 'yellow', 'red'], vmin=min_val, vmax=max_val)
-                def style_function(feature):
-                    val = feature['properties'][value_col]
-                    return {
-                        'fillColor': colormap(val) if val is not None else '#gray',
-                        'color': 'black',
-                        'weight': 1,
-                        'fillOpacity': 0.7
-                    }
-                folium.GeoJson(
-                    selected_gdf.__geo_interface__,
-                    style_function=style_function,
-                    tooltip=folium.GeoJsonTooltip(fields=[value_col])
-                ).add_to(m_daily)
-                colormap.caption = output_variable
-                colormap.add_to(m_daily)
-                st_folium(m_daily, width=800, height=500)
-                
-                # Provide a download button for the full daily spatial GeoJSON
-                geojson_str = daily_spatial_gdf.to_json()
-                st.download_button("📥 Download Daily Spatial Results (GeoJSON)", geojson_str, file_name="daily_spatial_results.geojson", mime="application/json")
-            except Exception as e:
-                st.error(f"Spatial analysis failed: {str(e)}")
-                st.exception(e)
-        else:
-            st.warning("Please draw a polygon on the map first!")
+                    
+            with tab3:
+                st.subheader("Irrigation Scheduling & Efficiency Metrics")
+                if enable_forecast:
+                    st.write("**High ET Forecast Days:**")
+                    st.dataframe(results_df[results_df["High_ET_Forecast"]][["Date", "ET0 (mm)"]])
+                if enable_nue and ("NUE (kg/ha)" in results_df.columns):
+                    st.write("**Nitrogen Use Efficiency (NUE):**")
+                    st.dataframe(results_df[["Date", "Yield (ton/ha)", "NUE (kg/ha)"]])
+                if enable_yield:
+                    st.write("**Water Productivity Metrics:**")
+                    st.dataframe(results_df[["Date", "WP_ET", "WP_Irrigation"]])
+                    
+            with tab4:
+                if enable_yield and ('Yield (ton/ha)' in results_df.columns):
+                    st.write("### Yield Estimation")
+                    st.dataframe(results_df[['Date', 'Yield (ton/ha)']])
+                if enable_leaching and ('Leaching (kg/ha)' in results_df.columns):
+                    st.write("### Leaching Estimation")
+                    st.dataframe(results_df[['Date', 'Leaching (kg/ha)']])
+                    
+            # --- Optional: Soil Profile Water Storage Visualization ---
+            if show_soil_profile and not enable_multiseason:
+                st.subheader("Soil Profile Water Storage")
+                # Here we call SIMdualKc with return_soil_profile enabled (if not already done in multi-season)
+                _, soil_profile = SIMdualKc(weather_df, crop_df, soil_df, track_drain, enable_yield,
+                                            use_fao33, Ym, Ky, use_transp, WP_yield,
+                                            enable_leaching, leaching_method, nitrate_conc,
+                                            total_N_input, leaching_fraction,
+                                            dynamic_root_growth=enable_dynamic_root,
+                                            initial_root_depth=initial_root_depth,
+                                            max_root_depth=max_root_depth,
+                                            days_to_max=days_to_max,
+                                            return_soil_profile=True)
+                soil_profile_df = pd.DataFrame(soil_profile)
+                fig3, ax3 = plt.subplots()
+                ax3.bar(soil_profile_df['Layer'].astype(str), soil_profile_df['SW (mm)'])
+                ax3.set_xlabel("Soil Layer")
+                ax3.set_ylabel("Water Storage (mm)")
+                ax3.set_title("Final Soil Profile Water Storage")
+                st.pyplot(fig3)
+                    
+            if show_monthly_summary:
+                st.subheader("📆 Monthly Summary")
+                monthly = results_df.copy()
+                monthly['Month'] = monthly['Date'].dt.to_period('M')
+                summary = monthly.groupby('Month').agg({
+                    'ET0 (mm)': 'mean',
+                    'ETc (mm)': 'mean',
+                    'ETa_transp (mm)': 'mean',
+                    'ETa_evap (mm)': 'mean',
+                    'Cumulative_Irrigation (mm)': 'max',
+                    'Cumulative_Precip (mm)': 'max',
+                    'Stress_Days': 'max'
+                }).reset_index()
+                st.dataframe(summary)
+        except Exception as e:
+            st.error(f"⚠️ Simulation failed: {e}")
+else:
+    st.info("📂 Please upload all required files and click 'Run Simulation'.")
