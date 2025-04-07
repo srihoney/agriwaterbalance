@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta  # Updated import
+from datetime import datetime, timedelta
 import requests
 import math
 import time
@@ -72,9 +72,19 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Cache for weather data
+# Cache for weather data and API call counter
 if 'weather_cache' not in st.session_state:
     st.session_state.weather_cache = {}
+if 'api_calls' not in st.session_state:
+    st.session_state.api_calls = 0
+if 'last_reset_date' not in st.session_state:
+    st.session_state.last_reset_date = datetime.now().date()
+
+# Reset API call counter daily
+current_date = datetime.now().date()
+if st.session_state.last_reset_date != current_date:
+    st.session_state.api_calls = 0
+    st.session_state.last_reset_date = current_date
 
 # Core Simulation Functions
 def compute_Ks(SW, WP, FC, p):
@@ -277,18 +287,38 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
     return results_df
 
 # Data Fetching Function with OpenWeatherMap
-def fetch_weather_data(lat, lon, start_date, end_date, forecast=False):
+def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_data=None):
+    if manual_data is not None:
+        # Use manually provided data
+        dates = pd.date_range(start=start_date, end=end_date, freq='D')
+        if len(dates) != len(manual_data['tmax']):
+            st.error("Manual data length does not match the date range. Please provide data for all 7 days.")
+            return None
+        weather_df = pd.DataFrame({
+            "Date": dates,
+            "ET0": manual_data['eto'],
+            "Precipitation": manual_data['precip'],
+            "Irrigation": [0] * len(dates)
+        })
+        return weather_df
+
     cache_key = f"{lat}_{lon}_{start_date}_{end_date}_{forecast}"
     if cache_key in st.session_state.weather_cache:
         return st.session_state.weather_cache[cache_key]
 
     if forecast:
+        # Check API call limit
+        if st.session_state.api_calls >= 1000:
+            st.warning("Daily API call limit (1,000 calls) for OpenWeatherMap has been reached. Please use manual input or try again tomorrow.")
+            return None
+
         # OpenWeatherMap API for forecast
-        api_key = "fe2d869569674a4afbfca57707bdf691"  # Your API key
-        url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"  # Use api_key variable
+        api_key = "fe2d869569674a4afbfca57707bdf691"
+        url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"
         try:
             response = session.get(url, timeout=30)
             response.raise_for_status()
+            st.session_state.api_calls += 1
             data = response.json()
             
             # Aggregate 3-hourly data into daily data
@@ -399,6 +429,7 @@ with setup_tab:
         
         with st.expander("Weather Data"):
             st.write("Upload a text file with columns: Date, ET0, Precipitation, Irrigation")
+            st.write("Ensure the Date column is in a format like 'YYYY-MM-DD' (e.g., 2023-01-01).")
             weather_file = st.file_uploader("Weather Data File (.txt)", type="txt", key="weather")
             sample_weather = pd.DataFrame({
                 "Date": ["2023-01-01", "2023-01-02", "2023-01-03"],
@@ -489,10 +520,43 @@ with setup_tab:
                 nitrate_conc = total_N_input = leaching_fraction = 0
             
             enable_etaforecast = st.checkbox("Enable 7-Day ETa Forecast", value=False, help="Generate a 7-day forecast of actual evapotranspiration.")
+            manual_forecast_data = None
             if enable_etaforecast:
                 st.write("Enter your field's coordinates for weather forecasting. Find these using Google Maps by right-clicking on your field's location.")
                 forecast_lat = st.number_input("Field Latitude", value=0.0)
                 forecast_lon = st.number_input("Field Longitude", value=0.0)
+                
+                # Option for manual input if API limit is reached
+                use_manual_input = st.checkbox("Use Manual Weather Forecast Input (if API limit is reached)", value=False)
+                if use_manual_input:
+                    st.write("Provide daily weather data for the next 7 days.")
+                    tmax_values = []
+                    tmin_values = []
+                    precip_values = []
+                    for i in range(7):
+                        st.write(f"Day {i+1}")
+                        tmax = st.number_input(f"Maximum Temperature (°C) for Day {i+1}", value=20.0, key=f"tmax_{i}")
+                        tmin = st.number_input(f"Minimum Temperature (°C) for Day {i+1}", value=10.0, key=f"tmin_{i}")
+                        precip = st.number_input(f"Precipitation (mm) for Day {i+1}", value=0.0, key=f"precip_{i}")
+                        tmax_values.append(tmax)
+                        tmin_values.append(tmin)
+                        precip_values.append(precip)
+                    # Calculate ETo using Hargreaves method
+                    eto_values = []
+                    for tmax, tmin in zip(tmax_values, tmin_values):
+                        if tmax < tmin:
+                            tmax, tmin = tmin, tmax
+                        Ra = 10  # Simplified
+                        Tmean = (tmax + tmin) / 2
+                        ETo = 0.0023 * Ra * (Tmean + 17.8) * (tmax - tmin) ** 0.5
+                        ETo = max(0, ETo)
+                        eto_values.append(ETo)
+                    manual_forecast_data = {
+                        'tmax': tmax_values,
+                        'tmin': tmin_values,
+                        'precip': precip_values,
+                        'eto': eto_values
+                    }
             else:
                 forecast_lat = forecast_lon = 0.0
             
@@ -512,7 +576,20 @@ with setup_tab:
     if st.session_state.get('run_simulation', False):
         if weather_file and (crop_file or crop_input_method != "Upload My Own") and soil_file:
             try:
-                weather_df = pd.read_csv(weather_file, parse_dates=['Date'])
+                # Load weather data and ensure Date column is datetime
+                weather_df = pd.read_csv(weather_file)
+                # Try to convert Date column to datetime
+                try:
+                    weather_df['Date'] = pd.to_datetime(weather_df['Date'])
+                except Exception as e:
+                    st.error(f"Failed to parse the 'Date' column in the weather file. Please ensure dates are in a format like 'YYYY-MM-DD' (e.g., 2023-01-01). Error: {e}")
+                    st.stop()
+                
+                # Verify that Date column is datetime type
+                if not pd.api.types.is_datetime64_any_dtype(weather_df['Date']):
+                    st.error("The 'Date' column in the weather file must contain valid dates in a format like 'YYYY-MM-DD'. Please check your file.")
+                    st.stop()
+
                 if crop_input_method == "Upload My Own":
                     crop_df = pd.read_csv(crop_file)
                 soil_df = pd.read_csv(soil_file)
@@ -540,9 +617,9 @@ with setup_tab:
                 
                 if enable_etaforecast:
                     last_date = weather_df['Date'].max()
-                    forecast_start = last_date + timedelta(days=1)  # Use timedelta directly
+                    forecast_start = last_date + timedelta(days=1)
                     forecast_end = forecast_start + timedelta(days=6)
-                    forecast_weather = fetch_weather_data(forecast_lat, forecast_lon, forecast_start, forecast_end, forecast=True)
+                    forecast_weather = fetch_weather_data(forecast_lat, forecast_lon, forecast_start, forecast_end, forecast=True, manual_data=manual_forecast_data)
                     if forecast_weather is not None:
                         forecast_results = SIMdualKc(forecast_weather, crop_df, soil_df, track_drainage, enable_yield,
                                                      use_fao33, Ym, Ky, use_transp, WP_yield,
@@ -552,7 +629,7 @@ with setup_tab:
                         st.session_state.forecast_results = forecast_results
                     else:
                         st.session_state.forecast_results = None
-                        st.warning("Unable to fetch forecast data. Please try again later.")
+                        st.warning("Unable to fetch forecast data. Please try again later or use manual input.")
                 else:
                     st.session_state.forecast_results = None
                 st.success("Simulation completed successfully!")
@@ -577,7 +654,7 @@ with results_tab:
             st.markdown('<div class="sub-header">7-Day ETa Forecast</div>', unsafe_allow_html=True)
             with st.container():
                 st.dataframe(forecast_results[["Date", "ETa_total (mm)"]])
-                st.write("Note: Forecast is based on OpenWeatherMap data. Values are ensured to be non-negative.")
+                st.write("Note: Forecast is based on OpenWeatherMap data or manual input. Values are ensured to be non-negative.")
         
         st.markdown('<div class="sub-header">Graphs</div>', unsafe_allow_html=True)
         with st.container():
