@@ -316,6 +316,18 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
             st.warning("Daily API call limit (1,000 calls) for OpenWeatherMap has been reached. Please use manual input or try again tomorrow.")
             return None
 
+        # Validate coordinates
+        if lat == 0.0 and lon == 0.0:
+            st.warning("Invalid coordinates (0.0, 0.0). Please enter valid latitude and longitude for your field.")
+            return None
+
+        # Validate date range
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        max_forecast_date = today + timedelta(days=5)
+        if start_date < today or end_date > max_forecast_date:
+            st.warning(f"Forecast date range ({start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}) is outside the valid range. OpenWeatherMap provides 5-day forecasts starting from today ({today.strftime('%Y-%m-%d')}) up to {max_forecast_date.strftime('%Y-%m-%d')}. Please adjust your weather data dates or use manual input.")
+            return None
+
         # OpenWeatherMap API for forecast
         api_key = "fe2d869569674a4afbfca57707bdf691"
         url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"
@@ -341,6 +353,9 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
                         daily_data[date_str]['tmax'] = max(daily_data[date_str]['tmax'], entry['main']['temp_max'])
                         daily_data[date_str]['tmin'] = min(daily_data[date_str]['tmin'], entry['main']['temp_min'])
                         daily_data[date_str]['precip'] += entry.get('rain', {}).get('3h', 0)
+            
+            # Debug: Log the contents of daily_data
+            st.write("Debug: daily_data contents:", daily_data)
             
             if not daily_data:
                 st.warning("No forecast data available for the specified date range.")
@@ -370,6 +385,11 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
                 "Precipitation": precip_list,
                 "Irrigation": [0] * len(dates)
             })
+            
+            # Check if weather_df is empty
+            if weather_df.empty:
+                st.warning("Processed forecast weather data is empty after aggregation.")
+                return None
             
             # Sort by date
             weather_df = weather_df.sort_values("Date").reset_index(drop=True)
