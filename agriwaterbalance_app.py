@@ -43,17 +43,19 @@ def compute_ETc(Kcb, Ks, Ke, ET0):
     return ETc
 
 def interpolate_crop_stages(crop_df, total_days):
-    days = np.arange(1, total_days + 1)
+    # Initialize arrays with the size of total_days
     Kcb = np.zeros(total_days)
     root_depth = np.zeros(total_days)
     p = np.zeros(total_days)
     Ke = np.zeros(total_days)
     
+    # Iterate over crop stages
     for i in range(len(crop_df) - 1):
         start_day = int(crop_df.iloc[i]['Start_Day'])
-        end_day = int(crop_df.iloc[i]['End_Day'])
-        next_start_day = int(crop_df.iloc[i + 1]['Start_Day'])
+        # Cap end_day to total_days to avoid exceeding array size
+        end_day = min(int(crop_df.iloc[i]['End_Day']), total_days)
         
+        # Get values for interpolation
         Kcb_start = crop_df.iloc[i]['Kcb']
         Kcb_end = crop_df.iloc[i + 1]['Kcb']
         root_start = crop_df.iloc[i]['Root_Depth_mm']
@@ -63,23 +65,43 @@ def interpolate_crop_stages(crop_df, total_days):
         Ke_start = crop_df.iloc[i]['Ke']
         Ke_end = crop_df.iloc[i + 1]['Ke']
         
+        # Handle days before the first stage (if any)
         if i == 0 and start_day > 1:
-            Kcb[0:start_day-1] = 0
+            Kcb[0:start_day-1] = 0  # Or some initial value
             root_depth[0:start_day-1] = root_start
             p[0:start_day-1] = p_start
             Ke[0:start_day-1] = Ke_start
         
+        # Define index range, ensuring it stays within total_days
         idx = np.arange(start_day - 1, end_day)
-        Kcb[idx] = np.linspace(Kcb_start, Kcb_end, len(idx))
-        root_depth[idx] = np.linspace(root_start, root_end, len(idx))
-        p[idx] = np.linspace(p_start, p_end, len(idx))
-        Ke[idx] = np.linspace(Ke_start, Ke_end, len(idx))
-        
-        if i == len(crop_df) - 2 and end_day < total_days:
-            Kcb[end_day-1:] = Kcb_end
-            root_depth[end_day-1:] = root_end
-            p[end_day-1:] = p_end
-            Ke[end_day-1:] = Ke_end
+        if len(idx) > 0:
+            Kcb[idx] = np.linspace(Kcb_start, Kcb_end, len(idx))
+            root_depth[idx] = np.linspace(root_start, root_end, len(idx))
+            p[idx] = np.linspace(p_start, p_end, len(idx))
+            Ke[idx] = np.linspace(Ke_start, Ke_end, len(idx))
+    
+    # Handle the last stage
+    last_start_day = int(crop_df.iloc[-1]['Start_Day'])
+    last_end_day = min(int(crop_df.iloc[-1]['End_Day']), total_days)
+    last_Kcb = crop_df.iloc[-1]['Kcb']
+    last_root = crop_df.iloc[-1]['Root_Depth_mm']
+    last_p = crop_df.iloc[-1]['p']
+    last_Ke = crop_df.iloc[-1]['Ke']
+    
+    if last_start_day <= total_days:
+        idx_last = np.arange(last_start_day - 1, last_end_day)
+        if len(idx_last) > 0:
+            Kcb[idx_last] = last_Kcb
+            root_depth[idx_last] = last_root
+            p[idx_last] = last_p
+            Ke[idx_last] = last_Ke
+    
+    # Extend last values if simulation period is longer
+    if last_end_day < total_days:
+        Kcb[last_end_day:] = last_Kcb
+        root_depth[last_end_day:] = last_root
+        p[last_end_day:] = last_p
+        Ke[last_end_day:] = last_Ke
     
     return Kcb, root_depth, p, Ke
 
