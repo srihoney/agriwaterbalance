@@ -292,7 +292,7 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
         # Use manually provided data
         dates = pd.date_range(start=start_date, end=end_date, freq='D')
         if len(dates) != len(manual_data['tmax']):
-            st.error("Manual data length does not match the date range. Please provide data for all 7 days.")
+            st.error("Manual data length does not match the date range. Please provide data for all 5 days.")
             return None
         weather_df = pd.DataFrame({
             "Date": dates,
@@ -366,16 +366,7 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
             # Sort by date
             weather_df = weather_df.sort_values("Date").reset_index(drop=True)
             
-            # Extrapolate to 7 days by averaging the last 3 days
-            if len(weather_df) < 7:
-                last_days = weather_df.tail(3)
-                avg_data = last_days.mean(numeric_only=True)
-                extra_days = 7 - len(weather_df)
-                extra_dates = pd.date_range(start=weather_df['Date'].max() + timedelta(days=1), periods=extra_days)
-                extra_data = pd.DataFrame([avg_data] * extra_days)
-                extra_data['Date'] = extra_dates
-                weather_df = pd.concat([weather_df, extra_data], ignore_index=True)
-            
+            # No extrapolation needed since we're sticking to 5 days
             st.session_state.weather_cache[cache_key] = weather_df
             return weather_df
         except Exception as e:
@@ -429,7 +420,7 @@ with setup_tab:
         
         with st.expander("Weather Data"):
             st.write("Upload a text file with columns: Date, ET0, Precipitation, Irrigation")
-            st.write("Ensure the Date column is in a format like 'YYYY-MM-DD' (e.g., 2023-01-01).")
+            st.write("Ensure the Date column is in a format like 'YYYY-MM-DD' (e.g., 2023-01-01) or Unix timestamps (e.g., 1672531200).")
             weather_file = st.file_uploader("Weather Data File (.txt)", type="txt", key="weather")
             sample_weather = pd.DataFrame({
                 "Date": ["2023-01-01", "2023-01-02", "2023-01-03"],
@@ -519,7 +510,7 @@ with setup_tab:
                 leaching_method = ""
                 nitrate_conc = total_N_input = leaching_fraction = 0
             
-            enable_etaforecast = st.checkbox("Enable 7-Day ETa Forecast", value=False, help="Generate a 7-day forecast of actual evapotranspiration.")
+            enable_etaforecast = st.checkbox("Enable 5-Day ETa Forecast", value=False, help="Generate a 5-day forecast of actual evapotranspiration.")
             manual_forecast_data = None
             if enable_etaforecast:
                 st.write("Enter your field's coordinates for weather forecasting. Find these using Google Maps by right-clicking on your field's location.")
@@ -529,11 +520,11 @@ with setup_tab:
                 # Option for manual input if API limit is reached
                 use_manual_input = st.checkbox("Use Manual Weather Forecast Input (if API limit is reached)", value=False)
                 if use_manual_input:
-                    st.write("Provide daily weather data for the next 7 days.")
+                    st.write("Provide daily weather data for the next 5 days.")
                     tmax_values = []
                     tmin_values = []
                     precip_values = []
-                    for i in range(7):
+                    for i in range(5):  # Changed to 5 days
                         st.write(f"Day {i+1}")
                         tmax = st.number_input(f"Maximum Temperature (°C) for Day {i+1}", value=20.0, key=f"tmax_{i}")
                         tmin = st.number_input(f"Minimum Temperature (°C) for Day {i+1}", value=10.0, key=f"tmin_{i}")
@@ -578,16 +569,28 @@ with setup_tab:
             try:
                 # Load weather data and ensure Date column is datetime
                 weather_df = pd.read_csv(weather_file)
-                # Try to convert Date column to datetime
-                try:
-                    weather_df['Date'] = pd.to_datetime(weather_df['Date'])
-                except Exception as e:
-                    st.error(f"Failed to parse the 'Date' column in the weather file. Please ensure dates are in a format like 'YYYY-MM-DD' (e.g., 2023-01-01). Error: {e}")
-                    st.stop()
+                # Check if Date column is numeric (e.g., Unix timestamps)
+                if pd.api.types.is_numeric_dtype(weather_df['Date']):
+                    # Assume Unix timestamps in seconds
+                    try:
+                        weather_df['Date'] = pd.to_datetime(weather_df['Date'], unit='s')
+                    except Exception as e:
+                        st.error(f"Failed to convert numeric 'Date' column (assumed to be Unix timestamps in seconds). Error: {e}")
+                        st.write("Sample of your Date column:", weather_df['Date'].head().to_list())
+                        st.stop()
+                else:
+                    # Try to parse as standard date format
+                    try:
+                        weather_df['Date'] = pd.to_datetime(weather_df['Date'])
+                    except Exception as e:
+                        st.error(f"Failed to parse the 'Date' column in the weather file. Please ensure dates are in a format like 'YYYY-MM-DD' (e.g., 2023-01-01) or Unix timestamps (e.g., 1672531200). Error: {e}")
+                        st.write("Sample of your Date column:", weather_df['Date'].head().to_list())
+                        st.stop()
                 
                 # Verify that Date column is datetime type
                 if not pd.api.types.is_datetime64_any_dtype(weather_df['Date']):
-                    st.error("The 'Date' column in the weather file must contain valid dates in a format like 'YYYY-MM-DD'. Please check your file.")
+                    st.error("The 'Date' column in the weather file must contain valid dates. Please check your file.")
+                    st.write("Sample of your Date column:", weather_df['Date'].head().to_list())
                     st.stop()
 
                 if crop_input_method == "Upload My Own":
@@ -618,7 +621,7 @@ with setup_tab:
                 if enable_etaforecast:
                     last_date = weather_df['Date'].max()
                     forecast_start = last_date + timedelta(days=1)
-                    forecast_end = forecast_start + timedelta(days=6)
+                    forecast_end = forecast_start + timedelta(days=4)  # 5 days total
                     forecast_weather = fetch_weather_data(forecast_lat, forecast_lon, forecast_start, forecast_end, forecast=True, manual_data=manual_forecast_data)
                     if forecast_weather is not None:
                         forecast_results = SIMdualKc(forecast_weather, crop_df, soil_df, track_drainage, enable_yield,
@@ -651,7 +654,7 @@ with results_tab:
             st.download_button("Download Results (.txt)", csv, file_name="results.txt", mime="text/plain")
         
         if enable_etaforecast and forecast_results is not None:
-            st.markdown('<div class="sub-header">7-Day ETa Forecast</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sub-header">5-Day ETa Forecast</div>', unsafe_allow_html=True)
             with st.container():
                 st.dataframe(forecast_results[["Date", "ETa_total (mm)"]])
                 st.write("Note: Forecast is based on OpenWeatherMap data or manual input. Values are ensured to be non-negative.")
