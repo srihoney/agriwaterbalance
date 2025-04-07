@@ -8,6 +8,7 @@ import math
 import time
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from datetime import datetime, timedelta
 
 # Configure Requests Session with Retries
 session = requests.Session()
@@ -17,8 +18,11 @@ session.mount('https://', HTTPAdapter(max_retries=retries))
 # App Configuration
 st.set_page_config(page_title="AgriWaterBalance", layout="wide")
 
-# Core Simulation Functions
+# Cache for weather data
+if 'weather_cache' not in st.session_state:
+    st.session_state.weather_cache = {}
 
+# Core Simulation Functions
 def compute_Ks(SW, WP, FC, p):
     TAW = (FC - WP) * 1000  # mm/m
     RAW = p * TAW
@@ -43,19 +47,15 @@ def compute_ETc(Kcb, Ks, Ke, ET0):
     return ETc
 
 def interpolate_crop_stages(crop_df, total_days):
-    # Initialize arrays with the size of total_days
     Kcb = np.zeros(total_days)
     root_depth = np.zeros(total_days)
     p = np.zeros(total_days)
     Ke = np.zeros(total_days)
     
-    # Iterate over crop stages
     for i in range(len(crop_df) - 1):
         start_day = int(crop_df.iloc[i]['Start_Day'])
-        # Cap end_day to total_days to avoid exceeding array size
         end_day = min(int(crop_df.iloc[i]['End_Day']), total_days)
         
-        # Get values for interpolation
         Kcb_start = crop_df.iloc[i]['Kcb']
         Kcb_end = crop_df.iloc[i + 1]['Kcb']
         root_start = crop_df.iloc[i]['Root_Depth_mm']
@@ -65,14 +65,12 @@ def interpolate_crop_stages(crop_df, total_days):
         Ke_start = crop_df.iloc[i]['Ke']
         Ke_end = crop_df.iloc[i + 1]['Ke']
         
-        # Handle days before the first stage (if any)
         if i == 0 and start_day > 1:
-            Kcb[0:start_day-1] = 0  # Or some initial value
+            Kcb[0:start_day-1] = 0
             root_depth[0:start_day-1] = root_start
             p[0:start_day-1] = p_start
             Ke[0:start_day-1] = Ke_start
         
-        # Define index range, ensuring it stays within total_days
         idx = np.arange(start_day - 1, end_day)
         if len(idx) > 0:
             Kcb[idx] = np.linspace(Kcb_start, Kcb_end, len(idx))
@@ -80,7 +78,6 @@ def interpolate_crop_stages(crop_df, total_days):
             p[idx] = np.linspace(p_start, p_end, len(idx))
             Ke[idx] = np.linspace(Ke_start, Ke_end, len(idx))
     
-    # Handle the last stage
     last_start_day = int(crop_df.iloc[-1]['Start_Day'])
     last_end_day = min(int(crop_df.iloc[-1]['End_Day']), total_days)
     last_Kcb = crop_df.iloc[-1]['Kcb']
@@ -96,7 +93,6 @@ def interpolate_crop_stages(crop_df, total_days):
             p[idx_last] = last_p
             Ke[idx_last] = last_Ke
     
-    # Extend last values if simulation period is longer
     if last_end_day < total_days:
         Kcb[last_end_day:] = last_Kcb
         root_depth[last_end_day:] = last_root
@@ -156,11 +152,11 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
                 TAW_root += (soil['FC'] - soil['WP']) * soil['Depth_mm'] * fraction
                 RAW_root += p * (soil['FC'] - soil['WP']) * soil['Depth_mm'] * fraction
         
-        Ks = compute_Ks(SW_root / root_depth, soil_df['WP'].mean(), soil_df['FC'].mean(), p)
+        Ks = compute_Ks(SW_root / root_depth if root_depth > 0 else 0, soil_df['WP'].mean(), soil_df['FC'].mean(), p)
         Kr = compute_Kr(soil_df['TEW'].sum(), soil_df['REW'].sum(), E)
         ETc = compute_ETc(Kcb, Ks, Ke, ET0)
-        ETa_transp = Kcb * Ks * ET0
-        ETa_evap = Ke * Kr * ET0
+        ETa_transp = max(0, Kcb * Ks * ET0)  # Clamp to non-negative
+        ETa_evap = max(0, Ke * Kr * ET0)     # Clamp to non-negative
         ETa_total = ETa_transp + ETa_evap
         
         water_input = precip + irrig
@@ -199,7 +195,7 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
         
         if enable_yield:
             if use_fao33 and Ym > 0 and Ky > 0:
-                Ya = Ym * (1 - Ky * (1 - (ETa_total / ETc)))
+                Ya = Ym * (1 - Ky * (1 - (ETa_total / ETc))) if ETc > 0 else 0
                 daily_result["Yield (ton/ha)"] = Ya
             if use_transp and WP_yield > 0:
                 Ya_transp = WP_yield * ETa_transp
@@ -207,61 +203,112 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
         
         if enable_leaching:
             if leaching_method == "Method 1: Drainage × nitrate concentration" and drainage > 0:
-                leaching = drainage * nitrate_conc * 0.001  # Convert mg/L to kg/ha
+                leaching = drainage * nitrate_conc * 0.001
                 daily_result["Leaching (kg/ha)"] = leaching
             elif leaching_method == "Method 2: Leaching Fraction × total N input":
                 leaching = leaching_fraction * total_N_input / total_days
                 daily_result["Leaching (kg/ha)"] = leaching
+        
+        if enable_yield and total_N_input > 0 and "Yield (ton/ha)" in daily_result:
+            daily_result["NUE (kg/ha)"] = daily_result["Yield (ton/ha)"] / total_N_input
         
         results.append(daily_result)
     
     results_df = pd.DataFrame(results)
     
     if return_soil_profile:
-        final_soil_profile = []
-        for j, soil in soil_df.iterrows():
-            final_soil_profile.append({
-                "Layer": j,
-                "Depth_mm": soil['Depth_mm'],
-                "SW (mm)": SW_layers[j]
-            })
+        final_soil_profile = [{"Layer": j, "Depth_mm": soil['Depth_mm'], "SW (mm)": SW_layers[j]} for j, soil in soil_df.iterrows()]
         return results_df, final_soil_profile
-    else:
-        return results_df
+    return results_df
 
-# Data Fetching Function
-def fetch_weather_data(lat, lon, start_date, end_date):
-    try:
-        start_str = start_date.strftime("%Y%m%d")
-        end_str = end_date.strftime("%Y%m%d")
-        url = f"https://power.larc.nasa.gov/api/temporal/daily/point?parameters=ALLSKY_SFC_SW_DWN,T2M,RH2M,PRECTOTCORR&community=AG&longitude={lon}&latitude={lat}&start={start_str}&end={end_str}&format=JSON"
-        response = session.get(url, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        
-        dates = pd.date_range(start_date, end_date)
-        ET0 = [data['properties']['parameter']['ALLSKY_SFC_SW_DWN'].get(d.strftime("%Y%m%d"), 0) * 0.2 for d in dates]  # Simplified ET0
-        precip = [data['properties']['parameter']['PRECTOTCORR'].get(d.strftime("%Y%m%d"), 0) for d in dates]
-        
-        weather_df = pd.DataFrame({
-            "Date": dates,
-            "ET0": ET0,
-            "Precipitation": precip,
-            "Irrigation": [0] * len(dates)
-        })
-        return weather_df
-    except Exception as e:
-        st.warning(f"Failed to fetch weather data: {e}. Forecast may be unavailable.")
-        return None
+# Data Fetching Function with OpenWeatherMap
+def fetch_weather_data(lat, lon, start_date, end_date, forecast=False):
+    cache_key = f"{lat}_{lon}_{start_date}_{end_date}_{forecast}"
+    if cache_key in st.session_state.weather_cache:
+        return st.session_state.weather_cache[cache_key]
+
+    if forecast:
+        # OpenWeatherMap API for forecast
+        api_key = "fe2d869569674a4afbfca57707bdf691"  # <--- Place your API key here
+        url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"
+        try:
+            response = session.get(url, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            
+            dates = []
+            ETo_list = []
+            precip_list = []
+            for entry in data['list']:
+                dt = datetime.fromtimestamp(entry['dt'])
+                if start_date <= dt <= end_date:
+                    dates.append(dt)
+                    # Simplified ETo calculation (Hargreaves method)
+                    tmax = entry['main']['temp_max']
+                    tmin = entry['main']['temp_min']
+                    # Hargreaves method: ETo = 0.0023 * Ra * (Tmean + 17.8) * (Tmax - Tmin)^0.5
+                    # For simplicity, approximate Ra (extraterrestrial radiation) as a constant
+                    Ra = 10  # Placeholder; ideally calculate based on latitude and day of year
+                    Tmean = (tmax + tmin) / 2
+                    ETo = 0.0023 * Ra * (Tmean + 17.8) * (tmax - tmin) ** 0.5
+                    ETo = max(0, ETo)  # Ensure ETo is non-negative
+                    ETo_list.append(ETo)
+                    precip = entry.get('rain', {}).get('3h', 0)
+                    precip_list.append(precip)
+            
+            weather_df = pd.DataFrame({
+                "Date": dates,
+                "ET0": ETo_list,
+                "Precipitation": precip_list,
+                "Irrigation": [0] * len(dates)
+            })
+            
+            # Extrapolate to 7 days if needed
+            if len(weather_df) < 7:
+                last_day = weather_df.iloc[-1].copy()
+                extra_days = 7 - len(weather_df)
+                extra_dates = pd.date_range(start=last_day['Date'] + timedelta(days=1), periods=extra_days)
+                extra_data = pd.DataFrame([last_day] * extra_days)
+                extra_data['Date'] = extra_dates
+                weather_df = pd.concat([weather_df, extra_data], ignore_index=True)
+            
+            st.session_state.weather_cache[cache_key] = weather_df
+            return weather_df
+        except Exception as e:
+            st.error(f"Failed to fetch forecast data: {e}")
+            return None
+    else:
+        # Historical data via NASA POWER API
+        try:
+            start_str = start_date.strftime("%Y%m%d")
+            end_str = end_date.strftime("%Y%m%d")
+            url = f"https://power.larc.nasa.gov/api/temporal/daily/point?parameters=ALLSKY_SFC_SW_DWN,T2M,RH2M,PRECTOTCORR&community=AG&longitude={lon}&latitude={lat}&start={start_str}&end={end_str}&format=JSON"
+            response = session.get(url, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            
+            dates = pd.date_range(start_date, end_date)
+            ET0 = [data['properties']['parameter']['ALLSKY_SFC_SW_DWN'].get(d.strftime("%Y%m%d"), 0) * 0.2 for d in dates]
+            precip = [data['properties']['parameter']['PRECTOTCORR'].get(d.strftime("%Y%m%d"), 0) for d in dates]
+            
+            weather_df = pd.DataFrame({
+                "Date": dates,
+                "ET0": ET0,
+                "Precipitation": precip,
+                "Irrigation": [0] * len(dates)
+            })
+            st.session_state.weather_cache[cache_key] = weather_df
+            return weather_df
+        except Exception as e:
+            st.warning(f"Failed to fetch historical weather data: {e}")
+            return None
 
 # User Interface
 st.title("AgriWaterBalance")
 st.markdown("**A Simple Tool for Soil Water Management**")
 
-# Tabs for Setup and Results
 setup_tab, results_tab = st.tabs(["Simulation Setup", "Results"])
 
-# Session State Initialization
 if 'results_df' not in st.session_state:
     st.session_state.results_df = None
 if 'forecast_results' not in st.session_state:
@@ -272,7 +319,6 @@ if 'soil_profile' not in st.session_state:
 with setup_tab:
     st.header("Upload Input Files")
     
-    # Weather Data
     st.subheader("Weather Data")
     st.write("Upload a text file with columns: Date, ET0, Precipitation, Irrigation")
     weather_file = st.file_uploader("Weather Data (.txt)", type="txt")
@@ -284,7 +330,6 @@ with setup_tab:
     })
     st.download_button("Download Sample Weather Data", sample_weather.to_csv(index=False), file_name="weather_sample.txt", mime="text/plain")
     
-    # Crop Stage Data
     st.subheader("Crop Stage Data")
     crop_input_method = st.selectbox("Select Crop Input Method", ["Upload My Own", "Maize", "Wheat", "Soybean", "Rice", "Almond", "Tomato", "Custom"])
     if crop_input_method == "Upload My Own":
@@ -320,7 +365,6 @@ with setup_tab:
         st.write("Edit Crop Stage Data (Optional)")
         crop_df = st.data_editor(crop_df, num_rows="dynamic")
     
-    # Soil Layers Data
     st.subheader("Soil Layers Data")
     st.write("Upload a text file with columns: Depth_mm, FC, WP, TEW, REW")
     soil_file = st.file_uploader("Soil Layers (.txt)", type="txt")
@@ -333,7 +377,6 @@ with setup_tab:
     })
     st.download_button("Download Sample Soil Data", sample_soil.to_csv(index=False), file_name="soil_sample.txt", mime="text/plain")
     
-    # Additional Features
     st.header("Additional Features")
     track_drainage = st.checkbox("Track Drainage", value=True)
     enable_yield = st.checkbox("Enable Yield Estimation", value=False)
@@ -418,7 +461,7 @@ with setup_tab:
                     last_date = weather_df['Date'].max()
                     forecast_start = last_date + datetime.timedelta(days=1)
                     forecast_end = forecast_start + datetime.timedelta(days=6)
-                    forecast_weather = fetch_weather_data(forecast_lat, forecast_lon, forecast_start, forecast_end)
+                    forecast_weather = fetch_weather_data(forecast_lat, forecast_lon, forecast_start, forecast_end, forecast=True)
                     if forecast_weather is not None:
                         forecast_results = SIMdualKc(forecast_weather, crop_df, soil_df, track_drainage, enable_yield,
                                                      use_fao33, Ym, Ky, use_transp, WP_yield,
@@ -428,7 +471,7 @@ with setup_tab:
                         st.session_state.forecast_results = forecast_results
                     else:
                         st.session_state.forecast_results = None
-                        st.warning("Note: ETa forecast is based on historical data from NASA POWER API and may not reflect future conditions. Integration with a weather forecast API is under development.")
+                        st.warning("Unable to fetch forecast data. Please try again later.")
                 else:
                     st.session_state.forecast_results = None
                 st.success("Simulation completed successfully!")
@@ -451,7 +494,7 @@ with results_tab:
         if enable_etaforecast and forecast_results is not None:
             st.subheader("7-Day ETa Forecast")
             st.dataframe(forecast_results[["Date", "ETa_total (mm)"]])
-            st.write("Note: Forecast is based on historical data and may not reflect future weather conditions.")
+            st.write("Note: Forecast is based on OpenWeatherMap data. Values are clamped to non-negative for consistency.")
         
         st.subheader("Graphs")
         plot_options = ["ETa Components", "Cumulative Metrics", "Soil Water Storage", "Drainage", "Root Depth"]
