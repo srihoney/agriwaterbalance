@@ -426,7 +426,7 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
             return None
 
 # User Interface
-st.markdown('<div style="text-align: center;"><img src="agriwaterbalance/logo1.png" alt="Logo" style="max-width: 200px; margin-bottom: 10px;"></div>', unsafe_allow_html=True)
+st.image("agriwaterbalance/logo1.png", width=200)
 st.markdown('<div class="main-header">AgriWaterBalance</div>', unsafe_allow_html=True)
 st.markdown("**A Professional Tool for Soil Water Management**", unsafe_allow_html=True)
 
