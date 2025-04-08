@@ -25,7 +25,7 @@ try:
         encoded_string = base64.b64encode(image_file.read()).decode()
     logo_url = f"data:image/png;base64,{encoded_string}"
 except FileNotFoundError:
-    st.error("logo.png not found. Please ensure the file is in the same directory as your app script.")
+    st.error("Logo file not found. Please ensure the file is in the same directory as your app script.")
     logo_url = ""
 
 # Custom CSS for Professional Look
@@ -180,7 +180,7 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
               enable_dynamic_root=False, initial_root_depth=None, max_root_depth=None, days_to_max=None,
               return_soil_profile=False, initial_SW_layers=None):
     if weather_df.empty:
-        st.error("Weather DataFrame is empty. Cannot run simulation.")
+        st.error("Weather data is empty. Please check your input.")
         return None
     
     total_days = len(weather_df)
@@ -301,13 +301,13 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
         return results_df, final_soil_profile
     return results_df
 
-# Updated fetch_weather_data function with corrected signature
+# Updated fetch_weather_data function with generalized error handling and proper date conversion
 def fetch_weather_data(lat, lon, start_date, end_date, forecast=True, manual_data=None):
     cache_key = f"{lat}_{lon}_{start_date}_{end_date}_{forecast}"
     if cache_key in st.session_state.weather_cache:
         return st.session_state.weather_cache[cache_key]
     
-    # If manual forecast data is provided, use that.
+    # Use manual forecast data if provided
     if manual_data is not None:
         dates = pd.date_range(start_date, end_date)
         weather_df = pd.DataFrame({
@@ -321,17 +321,18 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=True, manual_dat
 
     if forecast:
         if st.session_state.api_calls >= 1000:
-            st.warning("Daily API call limit (1,000 calls) for OpenWeatherMap has been reached. Please use manual input or try again tomorrow.")
+            st.warning("Daily API call limit reached. Please try again later.")
             return None
 
         if lat == 0.0 and lon == 0.0:
-            st.warning("Invalid coordinates (0.0, 0.0). Please enter valid latitude and longitude for your field.")
+            st.warning("Invalid coordinates. Please enter valid latitude and longitude.")
             return None
 
-        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        # Use date objects for proper comparison
+        today = datetime.now().date()
         max_forecast_date = today + timedelta(days=5)
         if start_date < today or end_date > max_forecast_date:
-            st.warning(f"Forecast date range ({start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}) is outside the valid range. OpenWeatherMap provides 5-day forecasts starting from today ({today.strftime('%Y-%m-%d')}) up to {max_forecast_date.strftime('%Y-%m-%d')}. Using current date instead.")
+            st.warning("Forecast date range is outside the valid period. Adjusting dates.")
             start_date = today
             end_date = today + timedelta(days=4)
 
@@ -345,9 +346,10 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=True, manual_dat
             
             daily_data = {}
             for entry in data['list']:
-                dt = datetime.fromtimestamp(entry['dt'])
-                if start_date <= dt <= end_date:
-                    date_str = dt.strftime("%Y-%m-%d")
+                # Convert the timestamp to a date for comparison.
+                dt_date = datetime.fromtimestamp(entry['dt']).date()
+                if start_date <= dt_date <= end_date:
+                    date_str = dt_date.strftime("%Y-%m-%d")
                     if date_str not in daily_data:
                         daily_data[date_str] = {
                             'tmax': entry['main']['temp_max'],
@@ -384,8 +386,8 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=True, manual_dat
             weather_df = weather_df.sort_values("Date").reset_index(drop=True)
             st.session_state.weather_cache[cache_key] = weather_df
             return weather_df
-        except Exception as e:
-            st.error(f"Failed to fetch forecast data: {e}")
+        except Exception:
+            st.error("Unable to fetch forecast data at this time. Please try again later.")
             return None
     else:
         try:
@@ -408,14 +410,13 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=True, manual_dat
             })
             st.session_state.weather_cache[cache_key] = weather_df
             return weather_df
-        except Exception as e:
-            st.warning(f"Failed to fetch historical weather data: {e}")
+        except Exception:
+            st.warning("Unable to fetch historical weather data. Please try again later.")
             return None
 
-# Debug: Example usage of fetch_weather_data (update lat & lon as needed)
+# Example usage for testing weather data fetch (using sample non-zero coordinates)
 start_date = datetime.now().date()
 end_date = start_date + timedelta(days=5)
-# Using sample coordinates (non-zero) to avoid warnings.
 weather_df = fetch_weather_data(35.0, -80.0, start_date, end_date, forecast=True)
 print(weather_df)
 
@@ -579,7 +580,7 @@ with setup_tab:
                     weather_df['Date'] = pd.to_datetime(weather_df['Date'])
                 
                 if not pd.api.types.is_datetime64_any_dtype(weather_df['Date']):
-                    st.error("The 'Date' column must contain valid dates (e.g., 'YYYY-MM-DD' or Unix timestamps).")
+                    st.error("The 'Date' column must contain valid dates.")
                     st.stop()
 
                 if crop_input_method == "Upload My Own":
@@ -635,15 +636,15 @@ with setup_tab:
                                                      initial_SW_layers=final_SW_layers, return_soil_profile=False)
                         st.session_state.forecast_results = forecast_results if forecast_results is not None else None
                         if forecast_results is None:
-                            st.warning("Failed to generate forecast results.")
+                            st.warning("Forecast results could not be generated.")
                     else:
                         st.session_state.forecast_results = None
-                        st.warning("Unable to fetch forecast data.")
+                        st.warning("Forecast data is not available.")
                 else:
                     st.session_state.forecast_results = None
                 st.success("Simulation completed successfully!")
-            except Exception as e:
-                st.error(f"Simulation failed: {e}")
+            except Exception:
+                st.error("Simulation failed. Please check your input data and try again.")
         else:
             st.error("Please upload all required files.")
 
@@ -663,7 +664,7 @@ with results_tab:
             st.markdown('<div class="sub-header">5-Day ETa Forecast</div>', unsafe_allow_html=True)
             with st.container():
                 st.dataframe(forecast_results[["Date", "ETa_total (mm)"]])
-                st.write("Note: Forecast shows actual evapotranspiration (ETa) for the next 5 days from today.")
+                st.write("Note: Forecast shows actual evapotranspiration (ETa) for the next 5 days.")
         
         st.markdown('<div class="sub-header">Graphs</div>', unsafe_allow_html=True)
         with st.container():
