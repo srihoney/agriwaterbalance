@@ -314,6 +314,12 @@ def fetch_weather_data(forecast, start_date, end_date):
         return pd.DataFrame.from_dict(weather_data, orient='index')
     return pd.DataFrame()  # Placeholder for non-forecast case
 
+# Example usage
+start_date = datetime.now().date()
+end_date = start_date + timedelta(days=5)
+weather_df = fetch_weather_data(forecast=True, start_date=start_date, end_date=end_date)
+print(weather_df)
+
     cache_key = f"{lat}_{lon}_{start_date}_{end_date}_{forecast}"
     if cache_key in st.session_state.weather_cache:
         return st.session_state.weather_cache[cache_key]
