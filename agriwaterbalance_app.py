@@ -9,7 +9,7 @@ import math
 import time
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-import base64  # Added for base64 encoding
+import base64
 
 # Configure Requests Session with Retries
 session = requests.Session()
@@ -26,26 +26,21 @@ try:
     logo_url = f"data:image/png;base64,{encoded_string}"
 except FileNotFoundError:
     st.error("logo.png not found. Please ensure the file is in the same directory as your app script.")
-    logo_url = ""  # Fallback to an empty string if the file isn’t found
+    logo_url = ""
 
-# Custom CSS for Professional Look including Header modifications
+# Custom CSS for Professional Look
 st.markdown(f"""
     <style>
-    /* Remove default body margin */
-    body {{
-        margin: 0;
-        padding: 0;
-    }}
-    /* Header container styling */
+    body {{ margin: 0; padding: 0; }}
     .header-container {{
         position: relative;
         background-color: #1E3A8A;
-        padding: 20px 20px;
+        padding: 20px;
         border-radius: 5px;
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-top: 0; /* no white space above header */
+        margin-top: 0;
     }}
     .header-logo {{
         position: absolute;
@@ -53,67 +48,25 @@ st.markdown(f"""
         top: 50%;
         transform: translateY(-50%);
     }}
-    .header-logo img {{
-        width: 100px;  /* Adjust size as needed */
-        height: auto;
-    }}
-    .header-title {{
-        color: white;
-        font-size: 36px;
-        font-weight: bold;
-        text-align: center;
-    }}
-    .sub-header {{
-        color: #1E3A8A;
-        font-size: 24px;
-        font-weight: bold;
-        margin-top: 20px;
-    }}
-    .footer {{
-        background-color: #1E3A8A;
-        color: white;
-        padding: 10px;
-        text-align: center;
-        position: fixed;
-        bottom: 0;
-        width: 100%;
-        border-radius: 5px 5px 0 0;
-    }}
-    .stButton>button {{
-        background-color: #2563EB;
-        color: white;
-        border-radius: 5px;
-        padding: 10px 20px;
-        font-size: 16px;
-    }}
-    .stButton>button:hover {{
-        background-color: #1E40AF;
-    }}
-    .stFileUploader {{
-        border: 2px dashed #1E3A8A;
-        border-radius: 5px;
-        padding: 10px;
-    }}
-    .stSelectbox {{
-        background-color: #F1F5F9;
-        border-radius: 5px;
-    }}
-    .stNumberInput input {{
-        background-color: #F1F5F9;
-        border-radius: 5px;
-    }}
+    .header-logo img {{ width: 100px; height: auto; }}
+    .header-title {{ color: white; font-size: 36px; font-weight: bold; text-align: center; }}
+    .sub-header {{ color: #1E3A8A; font-size: 24px; font-weight: bold; margin-top: 20px; }}
+    .footer {{ background-color: #1E3A8A; color: white; padding: 10px; text-align: center; position: fixed; bottom: 0; width: 100%; border-radius: 5px 5px 0 0; }}
+    .stButton>button {{ background-color: #2563EB; color: white; border-radius: 5px; padding: 10px 20px; font-size: 16px; }}
+    .stButton>button:hover {{ background-color: #1E40AF; }}
+    .stFileUploader {{ border: 2px dashed #1E3A8A; border-radius: 5px; padding: 10px; }}
+    .stSelectbox {{ background-color: #F1F5F9; border-radius: 5px; }}
+    .stNumberInput input {{ background-color: #F1F5F9; border-radius: 5px; }}
     </style>
 """, unsafe_allow_html=True)
 
-# Header with embedded logo
+# Header with Logo
 st.markdown(f"""
     <div class="header-container">
         <div class="header-logo">
             <img src="{logo_url}" alt="Logo">
         </div>
-        <div class="header-title">
-            AgriWaterBalance
-        </div>
+        <div class="header-title">AgriWaterBalance</div>
     </div>
 """, unsafe_allow_html=True)
 st.markdown("**A Professional Tool for Soil Water Management**", unsafe_allow_html=True)
@@ -121,14 +74,13 @@ st.markdown("**A Professional Tool for Soil Water Management**", unsafe_allow_ht
 # Navigation Tabs
 setup_tab, results_tab = st.tabs(["Setup Simulation", "View Results"])
 
+# Initialize Session State
 if 'results_df' not in st.session_state:
     st.session_state.results_df = None
 if 'forecast_results' not in st.session_state:
     st.session_state.forecast_results = None
 if 'soil_profile' not in st.session_state:
     st.session_state.soil_profile = None
-
-# Cache for weather data and API call counter
 if 'weather_cache' not in st.session_state:
     st.session_state.weather_cache = {}
 if 'api_calls' not in st.session_state:
@@ -136,7 +88,7 @@ if 'api_calls' not in st.session_state:
 if 'last_reset_date' not in st.session_state:
     st.session_state.last_reset_date = datetime.now().date()
 
-# Reset API call counter daily
+# Reset API Call Counter Daily
 current_date = datetime.now().date()
 if st.session_state.last_reset_date != current_date:
     st.session_state.api_calls = 0
@@ -226,14 +178,17 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
               enable_leaching=False, leaching_method="", nitrate_conc=0,
               total_N_input=0, leaching_fraction=0,
               enable_dynamic_root=False, initial_root_depth=None, max_root_depth=None, days_to_max=None,
-              return_soil_profile=False):
+              return_soil_profile=False, initial_SW_layers=None):
     if weather_df.empty:
         st.error("Weather DataFrame is empty. Cannot run simulation.")
         return None
     
     total_days = len(weather_df)
     results = []
-    SW_layers = [soil['FC'] * soil['Depth_mm'] for _, soil in soil_df.iterrows()]
+    if initial_SW_layers is None:
+        SW_layers = [soil['FC'] * soil['Depth_mm'] for _, soil in soil_df.iterrows()]
+    else:
+        SW_layers = initial_SW_layers.copy()
     E = soil_df['REW'].sum()
     cumulative_irrigation = 0
     cumulative_precip = 0
@@ -247,9 +202,9 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
     
     for day in range(total_days):
         date = weather_df.iloc[day]['Date']
-        ET0 = max(0, weather_df.iloc[day]['ET0'])  # Ensure ETo is non-negative
-        precip = max(0, weather_df.iloc[day]['Precipitation'])  # Ensure precipitation is non-negative
-        irrig = max(0, weather_df.iloc[day]['Irrigation'])  # Ensure irrigation is non-negative
+        ET0 = max(0, weather_df.iloc[day]['ET0'])
+        precip = max(0, weather_df.iloc[day]['Precipitation'])
+        irrig = max(0, weather_df.iloc[day]['Irrigation'])
         
         cumulative_irrigation += irrig
         cumulative_precip += precip
@@ -346,10 +301,8 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
         return results_df, final_soil_profile
     return results_df
 
-# Data Fetching Function with OpenWeatherMap
 def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_data=None):
     if manual_data is not None:
-        # Use manually provided data
         dates = pd.date_range(start=start_date, end=end_date, freq='D')
         if len(dates) != len(manual_data['tmax']):
             st.error("Manual data length does not match the date range. Please provide data for all 5 days.")
@@ -367,24 +320,21 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
         return st.session_state.weather_cache[cache_key]
 
     if forecast:
-        # Check API call limit
         if st.session_state.api_calls >= 1000:
             st.warning("Daily API call limit (1,000 calls) for OpenWeatherMap has been reached. Please use manual input or try again tomorrow.")
             return None
 
-        # Validate coordinates
         if lat == 0.0 and lon == 0.0:
             st.warning("Invalid coordinates (0.0, 0.0). Please enter valid latitude and longitude for your field.")
             return None
 
-        # Validate date range
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         max_forecast_date = today + timedelta(days=5)
         if start_date < today or end_date > max_forecast_date:
-            st.warning(f"Forecast date range ({start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}) is outside the valid range. OpenWeatherMap provides 5-day forecasts starting from today ({today.strftime('%Y-%m-%d')}) up to {max_forecast_date.strftime('%Y-%m-%d')}. Please adjust your weather data dates or use manual input.")
-            return None
+            st.warning(f"Forecast date range ({start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}) is outside the valid range. OpenWeatherMap provides 5-day forecasts starting from today ({today.strftime('%Y-%m-%d')}) up to {max_forecast_date.strftime('%Y-%m-%d')}. Using current date instead.")
+            start_date = today
+            end_date = today + timedelta(days=4)
 
-        # OpenWeatherMap API for forecast
         api_key = "fe2d869569674a4afbfca57707bdf691"
         url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"
         try:
@@ -393,7 +343,6 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
             st.session_state.api_calls += 1
             data = response.json()
             
-            # Aggregate 3-hourly data into daily data
             daily_data = {}
             for entry in data['list']:
                 dt = datetime.fromtimestamp(entry['dt'])
@@ -417,14 +366,12 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
                 dates.append(pd.to_datetime(date_str))
                 tmax = values['tmax']
                 tmin = values['tmin']
-                # Ensure tmax >= tmin to avoid negative square root
                 if tmax < tmin:
                     tmax, tmin = tmin, tmax
-                # Hargreaves method for ETo
-                Ra = 10  # Simplified; ideally calculate based on latitude and day of year
+                Ra = 10  # Simplified
                 Tmean = (tmax + tmin) / 2
                 ETo = 0.0023 * Ra * (Tmean + 17.8) * (tmax - tmin) ** 0.5
-                ETo = max(0, ETo)  # Ensure ETo is non-negative
+                ETo = max(0, ETo)
                 ETo_list.append(ETo)
                 precip_list.append(values['precip'])
             
@@ -441,7 +388,6 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
             st.error(f"Failed to fetch forecast data: {e}")
             return None
     else:
-        # Historical data via NASA POWER API
         try:
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
@@ -466,7 +412,7 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
             st.warning(f"Failed to fetch historical weather data: {e}")
             return None
 
-# User Interface - Setup Simulation Tab
+# Setup Simulation Tab
 with setup_tab:
     st.markdown('<div class="sub-header">Input Data Configuration</div>', unsafe_allow_html=True)
     
@@ -475,7 +421,6 @@ with setup_tab:
         
         with st.expander("Weather Data"):
             st.write("Upload a text file with columns: Date, ET0, Precipitation, Irrigation")
-            st.write("Ensure the Date column is in a format like 'YYYY-MM-DD' (e.g., 2023-01-01) or Unix timestamps (e.g., 1672531200).")
             weather_file = st.file_uploader("Weather Data File (.txt)", type="txt", key="weather")
             sample_weather = pd.DataFrame({
                 "Date": ["2023-01-01", "2023-01-02", "2023-01-03"],
@@ -536,22 +481,22 @@ with setup_tab:
         st.markdown("#### Additional Features")
         
         with st.expander("Simulation Options"):
-            track_drainage = st.checkbox("Track Drainage", value=True, help="Monitor water drainage from the soil.")
-            enable_yield = st.checkbox("Enable Yield Estimation", value=False, help="Estimate crop yield based on water use.")
+            track_drainage = st.checkbox("Track Drainage", value=True)
+            enable_yield = st.checkbox("Enable Yield Estimation", value=False)
             if enable_yield:
                 st.markdown("**Yield Estimation Options**")
-                use_fao33 = st.checkbox("Use FAO-33 Ky-based method", value=True, help="Standard method for yield estimation.")
+                use_fao33 = st.checkbox("Use FAO-33 Ky-based method", value=True)
                 if use_fao33:
                     Ym = st.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1)
                     Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
-                use_transp = st.checkbox("Use Transpiration-based method", value=False, help="Estimate yield based on transpiration.")
+                use_transp = st.checkbox("Use Transpiration-based method", value=False)
                 if use_transp:
                     WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
             else:
                 use_fao33 = use_transp = False
                 Ym = Ky = WP_yield = 0
             
-            enable_leaching = st.checkbox("Enable Leaching Estimation", value=False, help="Estimate nitrate leaching from the soil.")
+            enable_leaching = st.checkbox("Enable Leaching Estimation", value=False)
             if enable_leaching:
                 leaching_method = st.radio("Select Leaching Method", ["Method 1: Drainage × nitrate concentration", "Method 2: Leaching Fraction × total N input"])
                 if leaching_method == "Method 1: Drainage × nitrate concentration":
@@ -565,14 +510,13 @@ with setup_tab:
                 leaching_method = ""
                 nitrate_conc = total_N_input = leaching_fraction = 0
             
-            enable_etaforecast = st.checkbox("Enable 5-Day ETa Forecast", value=False, help="Generate a 5-day forecast of actual evapotranspiration.")
+            enable_etaforecast = st.checkbox("Enable 5-Day ETa Forecast", value=False)
             manual_forecast_data = None
             if enable_etaforecast:
-                st.write("Enter your field's coordinates for weather forecasting. Find these using Google Maps by right-clicking on your field's location.")
+                st.write("Enter your field's coordinates for weather forecasting.")
                 forecast_lat = st.number_input("Field Latitude", value=0.0)
                 forecast_lon = st.number_input("Field Longitude", value=0.0)
                 
-                # Option for manual input if API limit is reached
                 use_manual_input = st.checkbox("Use Manual Weather Forecast Input (if API limit is reached)", value=False)
                 if use_manual_input:
                     st.write("Provide daily weather data for the next 5 days.")
@@ -587,12 +531,11 @@ with setup_tab:
                         tmax_values.append(tmax)
                         tmin_values.append(tmin)
                         precip_values.append(precip)
-                    # Calculate ETo using Hargreaves method
                     eto_values = []
                     for tmax, tmin in zip(tmax_values, tmin_values):
                         if tmax < tmin:
                             tmax, tmin = tmin, tmax
-                        Ra = 10  # Simplified
+                        Ra = 10
                         Tmean = (tmax + tmin) / 2
                         ETo = 0.0023 * Ra * (Tmean + 17.8) * (tmax - tmin) ** 0.5
                         ETo = max(0, ETo)
@@ -606,8 +549,8 @@ with setup_tab:
             else:
                 forecast_lat = forecast_lon = 0.0
             
-            enable_nue = st.checkbox("Enable NUE Estimation", value=False, help="Estimate Nitrogen Use Efficiency (requires yield and nitrogen input).")
-            enable_dynamic_root = st.checkbox("Enable Dynamic Root Growth", value=False, help="Simulate root growth over time.")
+            enable_nue = st.checkbox("Enable NUE Estimation", value=False)
+            enable_dynamic_root = st.checkbox("Enable Dynamic Root Growth", value=False)
             if enable_dynamic_root:
                 initial_root_depth = st.number_input("Initial Root Depth (mm)", min_value=50, value=300, step=10)
                 max_root_depth = st.number_input("Maximum Root Depth (mm)", min_value=50, value=1000, step=10)
@@ -615,37 +558,21 @@ with setup_tab:
             else:
                 initial_root_depth = max_root_depth = days_to_max = None
             
-            show_soil_profile = st.checkbox("Show Soil Profile Water Storage", value=False, help="Visualize water storage in soil layers.")
+            show_soil_profile = st.checkbox("Show Soil Profile Water Storage", value=False)
     
     st.button("Run Simulation", key="run_simulation")
 
     if st.session_state.get('run_simulation', False):
         if weather_file and (crop_file or crop_input_method != "Upload My Own") and soil_file:
             try:
-                # Load weather data and ensure Date column is datetime
                 weather_df = pd.read_csv(weather_file)
-                # Check if Date column is numeric (e.g., Unix timestamps)
                 if pd.api.types.is_numeric_dtype(weather_df['Date']):
-                    # Assume Unix timestamps in seconds
-                    try:
-                        weather_df['Date'] = pd.to_datetime(weather_df['Date'], unit='s')
-                    except Exception as e:
-                        st.error(f"Failed to convert numeric 'Date' column (assumed to be Unix timestamps in seconds). Error: {e}")
-                        st.write("Sample of your Date column:", weather_df['Date'].head().to_list())
-                        st.stop()
+                    weather_df['Date'] = pd.to_datetime(weather_df['Date'], unit='s')
                 else:
-                    # Try to parse as standard date format
-                    try:
-                        weather_df['Date'] = pd.to_datetime(weather_df['Date'])
-                    except Exception as e:
-                        st.error(f"Failed to parse the 'Date' column in the weather file. Please ensure dates are in a format like 'YYYY-MM-DD' (e.g., 2023-01-01) or Unix timestamps (e.g., 1672531200). Error: {e}")
-                        st.write("Sample of your Date column:", weather_df['Date'].head().to_list())
-                        st.stop()
+                    weather_df['Date'] = pd.to_datetime(weather_df['Date'])
                 
-                # Verify that Date column is datetime type
                 if not pd.api.types.is_datetime64_any_dtype(weather_df['Date']):
-                    st.error("The 'Date' column in the weather file must contain valid dates. Please check your file.")
-                    st.write("Sample of your Date column:", weather_df['Date'].head().to_list())
+                    st.error("The 'Date' column must contain valid dates (e.g., 'YYYY-MM-DD' or Unix timestamps).")
                     st.stop()
 
                 if crop_input_method == "Upload My Own":
@@ -654,14 +581,13 @@ with setup_tab:
                 total_days = len(weather_df)
                 crop_df.loc[crop_df.index[-1], "End_Day"] = total_days
                 
-                if show_soil_profile:
+                if enable_etaforecast or show_soil_profile:
                     results_df, soil_profile = SIMdualKc(weather_df, crop_df, soil_df, track_drainage, enable_yield,
-                                                        use_fao33, Ym, Ky, use_transp, WP_yield,
-                                                        enable_leaching, leaching_method, nitrate_conc,
-                                                        total_N_input, leaching_fraction,
-                                                        enable_dynamic_root, initial_root_depth, max_root_depth, days_to_max,
-                                                        return_soil_profile=True)
-                    st.session_state.soil_profile = soil_profile
+                                                         use_fao33, Ym, Ky, use_transp, WP_yield,
+                                                         enable_leaching, leaching_method, nitrate_conc,
+                                                         total_N_input, leaching_fraction,
+                                                         enable_dynamic_root, initial_root_depth, max_root_depth, days_to_max,
+                                                         return_soil_profile=True)
                 else:
                     results_df = SIMdualKc(weather_df, crop_df, soil_df, track_drainage, enable_yield,
                                            use_fao33, Ym, Ky, use_transp, WP_yield,
@@ -669,37 +595,43 @@ with setup_tab:
                                            total_N_input, leaching_fraction,
                                            enable_dynamic_root, initial_root_depth, max_root_depth, days_to_max,
                                            return_soil_profile=False)
-                    st.session_state.soil_profile = None
-                
-                if results_df is None:
-                    st.error("Simulation failed to produce results. Please check your input data.")
-                    st.stop()
+                    soil_profile = None
                 
                 st.session_state.results_df = results_df
+                st.session_state.soil_profile = soil_profile if show_soil_profile else None
                 
                 if enable_etaforecast:
-                    last_date = weather_df['Date'].max()
-                    forecast_start = last_date + timedelta(days=1)
-                    forecast_end = forecast_start + timedelta(days=4)  # 5 days total
+                    final_SW_layers = [layer['SW (mm)'] for layer in soil_profile] if soil_profile else [soil['FC'] * soil['Depth_mm'] for _, soil in soil_df.iterrows()]
+                    
+                    Kcb_daily, root_depth_daily, p_daily, Ke_daily = interpolate_crop_stages(crop_df, total_days)
+                    last_day = total_days - 1
+                    forecast_crop_df = pd.DataFrame({
+                        "Start_Day": [1],
+                        "End_Day": [5],
+                        "Kcb": [Kcb_daily[last_day]],
+                        "Root_Depth_mm": [root_depth_daily[last_day]],
+                        "p": [p_daily[last_day]],
+                        "Ke": [Ke_daily[last_day]]
+                    })
+                    
+                    today = datetime.now().date()
+                    forecast_start = today
+                    forecast_end = today + timedelta(days=4)
                     forecast_weather = fetch_weather_data(forecast_lat, forecast_lon, forecast_start, forecast_end, forecast=True, manual_data=manual_forecast_data)
-                    if forecast_weather is not None:
-                        if forecast_weather.empty:
-                            st.warning("Forecast weather data is empty. Cannot generate ETa forecast.")
-                            st.session_state.forecast_results = None
-                        else:
-                            forecast_results = SIMdualKc(forecast_weather, crop_df, soil_df, track_drainage, enable_yield,
-                                                         use_fao33, Ym, Ky, use_transp, WP_yield,
-                                                         enable_leaching, leaching_method, nitrate_conc,
-                                                         total_N_input, leaching_fraction,
-                                                         enable_dynamic_root, initial_root_depth, max_root_depth, days_to_max)
-                            if forecast_results is None:
-                                st.warning("Failed to generate forecast results. Please check your input data.")
-                                st.session_state.forecast_results = None
-                            else:
-                                st.session_state.forecast_results = forecast_results
+                    
+                    if forecast_weather is not None and not forecast_weather.empty:
+                        forecast_results = SIMdualKc(forecast_weather, forecast_crop_df, soil_df, track_drainage, enable_yield,
+                                                     use_fao33, Ym, Ky, use_transp, WP_yield,
+                                                     enable_leaching, leaching_method, nitrate_conc,
+                                                     total_N_input, leaching_fraction,
+                                                     enable_dynamic_root, initial_root_depth, max_root_depth, days_to_max,
+                                                     initial_SW_layers=final_SW_layers, return_soil_profile=False)
+                        st.session_state.forecast_results = forecast_results if forecast_results is not None else None
+                        if forecast_results is None:
+                            st.warning("Failed to generate forecast results.")
                     else:
                         st.session_state.forecast_results = None
-                        st.warning("Unable to fetch forecast data. Please try again later or use manual input.")
+                        st.warning("Unable to fetch forecast data.")
                 else:
                     st.session_state.forecast_results = None
                 st.success("Simulation completed successfully!")
@@ -708,7 +640,7 @@ with setup_tab:
         else:
             st.error("Please upload all required files.")
 
-# User Interface - View Results Tab
+# View Results Tab
 with results_tab:
     if st.session_state.results_df is not None:
         results_df = st.session_state.results_df
@@ -718,23 +650,13 @@ with results_tab:
         st.markdown('<div class="sub-header">Simulation Results</div>', unsafe_allow_html=True)
         with st.container():
             st.dataframe(results_df)
-            csv = results_df.to_csv(index=False)
-            st.download_button("Download Results (.txt)", csv, file_name="results.txt", mime="text/plain")
+            st.download_button("Download Results (.txt)", results_df.to_csv(index=False), file_name="results.txt", mime="text/plain")
         
-        if enable_etaforecast:
-            if forecast_results is not None and not forecast_results.empty:
-                st.markdown('<div class="sub-header">5-Day ETa Forecast</div>', unsafe_allow_html=True)
-                with st.container():
-                    # Ensure required columns exist
-                    required_columns = ["Date", "ETa_total (mm)"]
-                    missing_columns = [col for col in required_columns if col not in forecast_results.columns]
-                    if missing_columns:
-                        st.error(f"Missing required columns in forecast results: {missing_columns}")
-                    else:
-                        st.dataframe(forecast_results[["Date", "ETa_total (mm)"]])
-                        st.write("Note: Forecast is based on OpenWeatherMap data or manual input. Values are ensured to be non-negative.")
-            else:
-                st.warning("No forecast results available. Please ensure forecast data was fetched successfully or use manual input.")
+        if enable_etaforecast and forecast_results is not None and not forecast_results.empty:
+            st.markdown('<div class="sub-header">5-Day ETa Forecast</div>', unsafe_allow_html=True)
+            with st.container():
+                st.dataframe(forecast_results[["Date", "ETa_total (mm)"]])
+                st.write("Note: Forecast shows actual evapotranspiration (ETa) for the next 5 days from today.")
         
         st.markdown('<div class="sub-header">Graphs</div>', unsafe_allow_html=True)
         with st.container():
@@ -745,7 +667,7 @@ with results_tab:
                 plot_options.append("Leaching")
             if 'NUE (kg/ha)' in results_df.columns:
                 plot_options.append("NUE")
-            if show_soil_profile and soil_profile is not None:
+            if show_soil_profile and soil_profile:
                 plot_options.append("Soil Profile Water")
             
             plot_option = st.selectbox("Select Graph to Display", plot_options)
@@ -798,7 +720,7 @@ with results_tab:
                 ax.grid(True)
                 st.pyplot(fig)
             
-            elif plot_option == "Yield" and 'Yield (ton/ha)' in results_df.columns:
+            elif plot_option == "Yield":
                 fig, ax = plt.subplots(figsize=(10, 6))
                 ax.plot(results_df['Date'], results_df['Yield (ton/ha)'], label="Yield")
                 ax.set_xlabel("Date")
@@ -807,7 +729,7 @@ with results_tab:
                 ax.grid(True)
                 st.pyplot(fig)
             
-            elif plot_option == "Leaching" and 'Leaching (kg/ha)' in results_df.columns:
+            elif plot_option == "Leaching":
                 fig, ax = plt.subplots(figsize=(10, 6))
                 ax.plot(results_df['Date'], results_df['Leaching (kg/ha)'], label="Leaching")
                 ax.set_xlabel("Date")
@@ -816,7 +738,7 @@ with results_tab:
                 ax.grid(True)
                 st.pyplot(fig)
             
-            elif plot_option == "NUE" and 'NUE (kg/ha)' in results_df.columns:
+            elif plot_option == "NUE":
                 fig, ax = plt.subplots(figsize=(10, 6))
                 ax.plot(results_df['Date'], results_df['NUE (kg/ha)'], label="NUE")
                 ax.set_xlabel("Date")
@@ -825,7 +747,7 @@ with results_tab:
                 ax.grid(True)
                 st.pyplot(fig)
             
-            elif plot_option == "Soil Profile Water" and show_soil_profile and soil_profile is not None:
+            elif plot_option == "Soil Profile Water":
                 st.markdown('<div class="sub-header">Soil Profile Water Storage</div>', unsafe_allow_html=True)
                 profile_df = pd.DataFrame(soil_profile)
                 st.dataframe(profile_df)
@@ -836,7 +758,7 @@ with results_tab:
                 ax.set_title("Water Storage per Soil Layer")
                 st.pyplot(fig)
     else:
-        st.info("Please complete the setup and click 'Run Simulation' to view results.")
+        st.info("Please complete the setup and run the simulation to view results.")
 
 # Footer
 st.markdown('<div class="footer">© 2025 AgriWaterBalance | Contact: support@agriwaterbalance.com</div>', unsafe_allow_html=True)
