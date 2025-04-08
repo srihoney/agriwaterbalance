@@ -9,6 +9,7 @@ import math
 import time
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import base64  # Added for base64 encoding
 
 # Configure Requests Session with Retries
 session = requests.Session()
@@ -18,16 +19,25 @@ session.mount('https://', HTTPAdapter(max_retries=retries))
 # App Configuration
 st.set_page_config(page_title="AgriWaterBalance", layout="wide")
 
+# Load and encode the logo image
+try:
+    with open("logo.png", "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode()
+    logo_url = f"data:image/png;base64,{encoded_string}"
+except FileNotFoundError:
+    st.error("logo.png not found. Please ensure the file is in the same directory as your app script.")
+    logo_url = ""  # Fallback to an empty string if the file isn’t found
+
 # Custom CSS for Professional Look including Header modifications
-st.markdown("""
+st.markdown(f"""
     <style>
     /* Remove default body margin */
-    body {
+    body {{
         margin: 0;
         padding: 0;
-    }
+    }}
     /* Header container styling */
-    .header-container {
+    .header-container {{
         position: relative;
         background-color: #1E3A8A;
         padding: 20px 20px;
@@ -36,26 +46,30 @@ st.markdown("""
         align-items: center;
         justify-content: center;
         margin-top: 0; /* no white space above header */
-    }
-    .header-logo {
+    }}
+    .header-logo {{
         position: absolute;
         left: 20px;
         top: 50%;
         transform: translateY(-50%);
-    }
-    .header-title {
+    }}
+    .header-logo img {{
+        width: 100px;  /* Adjust size as needed */
+        height: auto;
+    }}
+    .header-title {{
         color: white;
         font-size: 36px;
         font-weight: bold;
         text-align: center;
-    }
-    .sub-header {
+    }}
+    .sub-header {{
         color: #1E3A8A;
         font-size: 24px;
         font-weight: bold;
         margin-top: 20px;
-    }
-    .footer {
+    }}
+    .footer {{
         background-color: #1E3A8A;
         color: white;
         padding: 10px;
@@ -64,32 +78,55 @@ st.markdown("""
         bottom: 0;
         width: 100%;
         border-radius: 5px 5px 0 0;
-    }
-    .stButton>button {
+    }}
+    .stButton>button {{
         background-color: #2563EB;
         color: white;
         border-radius: 5px;
         padding: 10px 20px;
         font-size: 16px;
-    }
-    .stButton>button:hover {
+    }}
+    .stButton>button:hover {{
         background-color: #1E40AF;
-    }
-    .stFileUploader {
+    }}
+    .stFileUploader {{
         border: 2px dashed #1E3A8A;
         border-radius: 5px;
         padding: 10px;
-    }
-    .stSelectbox {
+    }}
+    .stSelectbox {{
         background-color: #F1F5F9;
         border-radius: 5px;
-    }
-    .stNumberInput input {
+    }}
+    .stNumberInput input {{
         background-color: #F1F5F9;
         border-radius: 5px;
-    }
+    }}
     </style>
 """, unsafe_allow_html=True)
+
+# Header with embedded logo
+st.markdown(f"""
+    <div class="header-container">
+        <div class="header-logo">
+            <img src="{logo_url}" alt="Logo">
+        </div>
+        <div class="header-title">
+            AgriWaterBalance
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+st.markdown("**A Professional Tool for Soil Water Management**", unsafe_allow_html=True)
+
+# Navigation Tabs
+setup_tab, results_tab = st.tabs(["Setup Simulation", "View Results"])
+
+if 'results_df' not in st.session_state:
+    st.session_state.results_df = None
+if 'forecast_results' not in st.session_state:
+    st.session_state.forecast_results = None
+if 'soil_profile' not in st.session_state:
+    st.session_state.soil_profile = None
 
 # Cache for weather data and API call counter
 if 'weather_cache' not in st.session_state:
@@ -373,13 +410,6 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
                         daily_data[date_str]['tmin'] = min(daily_data[date_str]['tmin'], entry['main']['temp_min'])
                         daily_data[date_str]['precip'] += entry.get('rain', {}).get('3h', 0)
             
-            # Debug: Log the contents of daily_data
-            st.write("Debug: daily_data contents:", daily_data)
-            
-            if not daily_data:
-                st.warning("No forecast data available for the specified date range.")
-                return None
-
             dates = []
             ETo_list = []
             precip_list = []
@@ -404,15 +434,7 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
                 "Precipitation": precip_list,
                 "Irrigation": [0] * len(dates)
             })
-            
-            # Check if weather_df is empty
-            if weather_df.empty:
-                st.warning("Processed forecast weather data is empty after aggregation.")
-                return None
-            
-            # Sort by date
             weather_df = weather_df.sort_values("Date").reset_index(drop=True)
-            
             st.session_state.weather_cache[cache_key] = weather_df
             return weather_df
         except Exception as e:
@@ -444,29 +466,7 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
             st.warning(f"Failed to fetch historical weather data: {e}")
             return None
 
-# User Interface - Custom Header with Logo on the Left and Title Centered
-st.markdown("""
-    <div class="header-container">
-        <div class="header-logo">
-            <img src="logo.png" alt="Logo">
-        </div>
-        <div class="header-title">
-            AgriWaterBalance
-        </div>
-    </div>
-""", unsafe_allow_html=True)
-st.markdown("**A Professional Tool for Soil Water Management**", unsafe_allow_html=True)
-
-# Navigation Tabs
-setup_tab, results_tab = st.tabs(["Setup Simulation", "View Results"])
-
-if 'results_df' not in st.session_state:
-    st.session_state.results_df = None
-if 'forecast_results' not in st.session_state:
-    st.session_state.forecast_results = None
-if 'soil_profile' not in st.session_state:
-    st.session_state.soil_profile = None
-
+# User Interface - Setup Simulation Tab
 with setup_tab:
     st.markdown('<div class="sub-header">Input Data Configuration</div>', unsafe_allow_html=True)
     
@@ -708,6 +708,7 @@ with setup_tab:
         else:
             st.error("Please upload all required files.")
 
+# User Interface - View Results Tab
 with results_tab:
     if st.session_state.results_df is not None:
         results_df = st.session_state.results_df
@@ -724,8 +725,6 @@ with results_tab:
             if forecast_results is not None and not forecast_results.empty:
                 st.markdown('<div class="sub-header">5-Day ETa Forecast</div>', unsafe_allow_html=True)
                 with st.container():
-                    # Debug: Check available columns
-                    st.write("Available columns in forecast_results:", forecast_results.columns.tolist())
                     # Ensure required columns exist
                     required_columns = ["Date", "ETa_total (mm)"]
                     missing_columns = [col for col in required_columns if col not in forecast_results.columns]
