@@ -301,19 +301,18 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
         return results_df, final_soil_profile
     return results_df
 
-def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_data=None):
-    if manual_data is not None:
-        dates = pd.date_range(start=start_date, end=end_date, freq='D')
-        if len(dates) != len(manual_data['tmax']):
-            st.error("Manual data length does not match the date range. Please provide data for all 5 days.")
-            return None
-        weather_df = pd.DataFrame({
-            "Date": dates,
-            "ET0": manual_data['eto'],
-            "Precipitation": manual_data['precip'],
-            "Irrigation": [0] * len(dates)
-        })
-        return weather_df
+def fetch_weather_data(forecast, start_date, end_date):
+    if forecast:
+        # Example API data
+        data = {'list': [{'dt': 1698230400}, {'dt': 1698316800}]}  # Timestamps for 2023-10-25 and 2023-10-26
+        weather_data = {}
+        for entry in data['list']:
+            dt = datetime.fromtimestamp(entry['dt']).date()  # Convert to date
+            if start_date <= dt <= end_date:
+                date_str = dt.strftime("%Y-%m-%d")
+                weather_data[date_str] = {'temp': 25, 'rain': 0}
+        return pd.DataFrame.from_dict(weather_data, orient='index')
+    return pd.DataFrame()  # Placeholder for non-forecast case
 
     cache_key = f"{lat}_{lon}_{start_date}_{end_date}_{forecast}"
     if cache_key in st.session_state.weather_cache:
