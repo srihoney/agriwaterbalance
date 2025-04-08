@@ -301,28 +301,23 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
         return results_df, final_soil_profile
     return results_df
 
-def fetch_weather_data(forecast, start_date, end_date):
-    if forecast:
-        # Example API data
-        data = {'list': [{'dt': 1698230400}, {'dt': 1698316800}]}  # Timestamps for 2023-10-25 and 2023-10-26
-        weather_data = {}
-        for entry in data['list']:
-            dt = datetime.fromtimestamp(entry['dt']).date()  # Convert to date
-            if start_date <= dt <= end_date:
-                date_str = dt.strftime("%Y-%m-%d")
-                weather_data[date_str] = {'temp': 25, 'rain': 0}
-        return pd.DataFrame.from_dict(weather_data, orient='index')
-    return pd.DataFrame()  # Placeholder for non-forecast case
-
-# Example usage
-start_date = datetime.now().date()
-end_date = start_date + timedelta(days=5)
-weather_df = fetch_weather_data(forecast=True, start_date=start_date, end_date=end_date)
-print(weather_df)
-
+# Updated fetch_weather_data function with corrected signature
+def fetch_weather_data(lat, lon, start_date, end_date, forecast=True, manual_data=None):
     cache_key = f"{lat}_{lon}_{start_date}_{end_date}_{forecast}"
     if cache_key in st.session_state.weather_cache:
         return st.session_state.weather_cache[cache_key]
+    
+    # If manual forecast data is provided, use that.
+    if manual_data is not None:
+        dates = pd.date_range(start_date, end_date)
+        weather_df = pd.DataFrame({
+            "Date": dates,
+            "ET0": manual_data['eto'],
+            "Precipitation": manual_data['precip'],
+            "Irrigation": [0] * len(dates)
+        })
+        st.session_state.weather_cache[cache_key] = weather_df
+        return weather_df
 
     if forecast:
         if st.session_state.api_calls >= 1000:
@@ -373,9 +368,9 @@ print(weather_df)
                 tmin = values['tmin']
                 if tmax < tmin:
                     tmax, tmin = tmin, tmax
-                Ra = 10  # Simplified
+                Ra = 10  # Simplified solar radiation factor
                 Tmean = (tmax + tmin) / 2
-                ETo = 0.0023 * Ra * (Tmean + 17.8) * (tmax - tmin) ** 0.5
+                ETo = 0.0023 * Ra * (Tmean + 17.8) * ((tmax - tmin) ** 0.5)
                 ETo = max(0, ETo)
                 ETo_list.append(ETo)
                 precip_list.append(values['precip'])
@@ -416,6 +411,13 @@ print(weather_df)
         except Exception as e:
             st.warning(f"Failed to fetch historical weather data: {e}")
             return None
+
+# Debug: Example usage of fetch_weather_data (update lat & lon as needed)
+start_date = datetime.now().date()
+end_date = start_date + timedelta(days=5)
+# Using sample coordinates (non-zero) to avoid warnings.
+weather_df = fetch_weather_data(35.0, -80.0, start_date, end_date, forecast=True)
+print(weather_df)
 
 # Setup Simulation Tab
 with setup_tab:
@@ -542,7 +544,7 @@ with setup_tab:
                             tmax, tmin = tmin, tmax
                         Ra = 10
                         Tmean = (tmax + tmin) / 2
-                        ETo = 0.0023 * Ra * (Tmean + 17.8) * (tmax - tmin) ** 0.5
+                        ETo = 0.0023 * Ra * (Tmean + 17.8) * ((tmax - tmin) ** 0.5)
                         ETo = max(0, ETo)
                         eto_values.append(ETo)
                     manual_forecast_data = {
@@ -568,7 +570,7 @@ with setup_tab:
     st.button("Run Simulation", key="run_simulation")
 
     if st.session_state.get('run_simulation', False):
-        if weather_file and (crop_file or crop_input_method != "Upload My Own") and soil_file:
+        if weather_file and (crop_file if crop_input_method == "Upload My Own" else True) and soil_file:
             try:
                 weather_df = pd.read_csv(weather_file)
                 if pd.api.types.is_numeric_dtype(weather_df['Date']):
@@ -757,7 +759,7 @@ with results_tab:
                 profile_df = pd.DataFrame(soil_profile)
                 st.dataframe(profile_df)
                 fig, ax = plt.subplots(figsize=(10, 6))
-                ax.bar(profile_df['Layer'], profile_df['SW (mm)'], color='skyblue')
+                ax.bar(profile_df['Layer'], profile_df['SW (mm)'])
                 ax.set_xlabel("Soil Layer")
                 ax.set_ylabel("Soil Water (mm)")
                 ax.set_title("Water Storage per Soil Layer")
