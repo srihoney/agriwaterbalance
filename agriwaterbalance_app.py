@@ -448,7 +448,7 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=False, manual_da
 st.markdown("""
     <div class="header-container">
         <div class="header-logo">
-            <img src="logo.png" style="width: auto; height: auto;" alt="Logo">
+            <img src="logo.png" alt="Logo">
         </div>
         <div class="header-title">
             AgriWaterBalance
