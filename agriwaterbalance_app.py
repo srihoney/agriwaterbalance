@@ -175,11 +175,13 @@ st.markdown(
 )
 st.markdown("**A Professional, All-in-One Tool for Crop Water Management**", unsafe_allow_html=True)
 
-# We only have 2 tabs now
+# --------------------------------------------------------------------------------
+# 4. Tabs: Only Setup + Results
+# --------------------------------------------------------------------------------
 setup_tab, results_tab = st.tabs(["Setup Simulation", "Results"])
 
 # --------------------------------------------------------------------------------
-# 4. Session State
+# 5. Session State
 # --------------------------------------------------------------------------------
 if 'results_df' not in st.session_state:
     st.session_state.results_df = None
@@ -194,7 +196,7 @@ if 'last_reset_date' not in st.session_state:
 if 'simulation_done' not in st.session_state:
     st.session_state.simulation_done = False
 
-# We'll also store the next 5 days forecast ETo & ETa in a separate DF
+# We'll store the next 5 days forecast ETo & ETa in a separate DF
 if 'forecast_5days_df' not in st.session_state:
     st.session_state.forecast_5days_df = pd.DataFrame()
 
@@ -204,7 +206,7 @@ if st.session_state.last_reset_date != current_date:
     st.session_state.last_reset_date = current_date
 
 # --------------------------------------------------------------------------------
-# 5. Water Balance & Weather Data
+# 6. Functions
 # --------------------------------------------------------------------------------
 def compute_Ks(Dr, RAW, TAW):
     if Dr <= RAW:
@@ -252,6 +254,7 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=True):
             for entry in data['list']:
                 dt_obj = datetime.fromtimestamp(entry['dt'])
                 dt_ = dt_obj.date()
+                # only up to 5 days from now
                 if dt_ > (datetime.now().date() + timedelta(days=4)):
                     continue
                 ds = dt_.strftime("%Y-%m-%d")
@@ -288,7 +291,7 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=True):
             f5_df = pd.DataFrame(daily_rows)
             st.session_state.forecast_5days_df = f5_df.copy()
             
-            wdf = f5_df.rename(columns={"ET0": "ET0", 
+            wdf = f5_df.rename(columns={"ET0": "ET0",
                                         "Precipitation":"Precipitation"})
             wdf = wdf.sort_values("Date").reset_index(drop=True)
             
@@ -592,8 +595,9 @@ def create_auto_stages_for_crop(crop_name):
     ]
     return pd.DataFrame(stg)
 
+
 # --------------------------------------------------------------------------------
-# 6. SETUP TAB
+# SETUP TAB
 # --------------------------------------------------------------------------------
 with setup_tab:
     st.markdown('<p style="font-size:16px;">1. Select Crop</p>', unsafe_allow_html=True)
@@ -771,7 +775,7 @@ with setup_tab:
 
 
 # --------------------------------------------------------------------------------
-# 7. RESULTS TAB
+# RESULTS TAB
 # --------------------------------------------------------------------------------
 with results_tab:
     if not st.session_state.get("simulation_done", False):
@@ -880,11 +884,11 @@ with results_tab:
                 buf.seek(0)
                 st.download_button("Download Plot", buf, file_name="leaching.png", mime="image/png")
 
-            # Separate table for the next 5 days forecast (ETo & ETa)
+            # Show a separate table for the next 5 days forecast (ETo & ETa)
             st.markdown("## Next 5 Days Forecast (ETo & ETa)")
             f5_df = st.session_state.forecast_5days_df.copy()
             if not f5_df.empty:
-                # If there's no "ETa" column, define it simply as ETa=ET0
+                # If there's no "ETa" column, define ETa = ET0 for demonstration
                 if "ETa" not in f5_df.columns:
                     f5_df["ETa"] = f5_df["ET0"]
                 f5_df_display = f5_df[["Date", "ET0", "ETa"]].copy()
