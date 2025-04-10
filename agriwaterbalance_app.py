@@ -13,13 +13,10 @@ from urllib3.util.retry import Retry
 import base64
 
 # --------------------------------------------------------------------------------
-# 1. Large Kc Database: merging Pereira et al. (2021a,b) plus additional references
+# 1. Large Kc Crop Database 
+#    (merging Pereira et al. (2021a,b) plus additional literature)
 # --------------------------------------------------------------------------------
-# References:
-#    (a) Standard single and basal crop coefficients for vegetable crops, an update of FAO56 (Pereira et al., 2021)
-#    (b) Standard single and basal crop coefficients for field crops. Updates to FAO56 (Pereira et al., 2021)
-# Additional typical values from broader FAO-56 literature are included.
-# For each crop, store Kc_mid, Kc_end, Kcb_mid, Kcb_end and a default total crop cycle length.
+# For each crop, we store Kc_mid, Kc_end, Kcb_mid, Kcb_end and default crop cycle length.
 CROP_DATABASE = {
     # ---------- Vegetables ----------
     "Carrot": {"Kc_mid": 1.05, "Kc_end": 0.95, "Kcb_mid": 1.00, "Kcb_end": 0.90, "total_days_default": 90},
@@ -49,7 +46,6 @@ CROP_DATABASE = {
     "Celery": {"Kc_mid": 1.05, "Kc_end": 0.90, "Kcb_mid": 1.00, "Kcb_end": 0.85, "total_days_default": 120},
     "Turnip": {"Kc_mid": 1.05, "Kc_end": 0.80, "Kcb_mid": 1.00, "Kcb_end": 0.75, "total_days_default": 85},
     "Radish": {"Kc_mid": 1.00, "Kc_end": 0.80, "Kcb_mid": 0.95, "Kcb_end": 0.75, "total_days_default": 45},
-
     # ---------- Field Crops ----------
     "Wheat": {"Kc_mid": 1.15, "Kc_end": 0.35, "Kcb_mid": 1.10, "Kcb_end": 0.30, "total_days_default": 150},
     "Barley": {"Kc_mid": 1.15, "Kc_end": 0.25, "Kcb_mid": 1.10, "Kcb_end": 0.20, "total_days_default": 130},
@@ -70,7 +66,13 @@ CROP_DATABASE = {
     "Millet": {"Kc_mid": 1.10, "Kc_end": 0.40, "Kcb_mid": 1.05, "Kcb_end": 0.35, "total_days_default": 100},
     "Quinoa": {"Kc_mid": 1.05, "Kc_end": 0.45, "Kcb_mid": 1.00, "Kcb_end": 0.40, "total_days_default": 120},
     "Lentil": {"Kc_mid": 1.10, "Kc_end": 0.25, "Kcb_mid": 1.05, "Kcb_end": 0.20, "total_days_default": 110},
-    "Potato": {"Kc_mid": 1.15, "Kc_end": 0.75, "Kcb_mid": 1.10, "Kcb_end": 0.70, "total_days_default": 110}
+    "Potato": {"Kc_mid": 1.15, "Kc_end": 0.75, "Kcb_mid": 1.10, "Kcb_end": 0.70, "total_days_default": 110},
+    # ---------- Additional Perennial/High-value Crops ----------
+    "Almond": {"Kc_mid": 1.10, "Kc_end": 0.70, "Kcb_mid": 1.05, "Kcb_end": 0.65, "total_days_default": 300},
+    "Walnuts": {"Kc_mid": 1.20, "Kc_end": 0.80, "Kcb_mid": 1.15, "Kcb_end": 0.75, "total_days_default": 300},
+    "Pistachio": {"Kc_mid": 1.15, "Kc_end": 0.75, "Kcb_mid": 1.10, "Kcb_end": 0.70, "total_days_default": 300},
+    "Citrus": {"Kc_mid": 1.05, "Kc_end": 0.65, "Kcb_mid": 1.00, "Kcb_end": 0.60, "total_days_default": 300},
+    "Olives": {"Kc_mid": 1.00, "Kc_end": 0.60, "Kcb_mid": 0.95, "Kcb_end": 0.55, "total_days_default": 300}
 }
 
 # --------------------------------------------------------------------------------
@@ -84,7 +86,6 @@ session.mount('https://', HTTPAdapter(max_retries=retries))
 # 3. Streamlit Page Configuration & Logo
 # --------------------------------------------------------------------------------
 st.set_page_config(page_title="Advanced AgriWaterBalance", layout="wide")
-
 try:
     with open("logo.png", "rb") as image_file:
         encoded_string = base64.b64encode(image_file.read()).decode()
@@ -92,7 +93,6 @@ try:
 except FileNotFoundError:
     logo_url = ""
 
-# Custom CSS for small fonts on Setup headers and for clean high‐resolution graphs
 st.markdown(f"""
     <style>
     body {{ margin: 0; padding: 0; }}
@@ -123,9 +123,7 @@ st.markdown(f"""
         background-color: #2563EB; color: white; border-radius: 5px; padding: 10px 20px; font-size: 16px;
     }}
     .stButton>button:hover {{ background-color: #1E40AF; }}
-    .stFileUploader {{
-        border: 2px dashed #1E3A8A; border-radius: 5px; padding: 10px;
-    }}
+    .stFileUploader {{ border: 2px dashed #1E3A8A; border-radius: 5px; padding: 10px; }}
     .stSelectbox {{ background-color: #F1F5F9; border-radius: 5px; }}
     .stNumberInput input {{ background-color: #F1F5F9; border-radius: 5px; }}
     </style>
@@ -155,7 +153,6 @@ if 'api_calls' not in st.session_state:
     st.session_state.api_calls = 0
 if 'last_reset_date' not in st.session_state:
     st.session_state.last_reset_date = datetime.now().date()
-
 current_date = datetime.now().date()
 if st.session_state.last_reset_date != current_date:
     st.session_state.api_calls = 0
@@ -164,7 +161,6 @@ if st.session_state.last_reset_date != current_date:
 # --------------------------------------------------------------------------------
 # 5. Water Balance Functions (SIMDualKc-like approach)
 # --------------------------------------------------------------------------------
-
 def compute_Ks(Dr, RAW, TAW):
     if Dr <= RAW:
         return 1.0
@@ -181,100 +177,11 @@ def compute_Kr(TEW, REW, Ew):
     else:
         return (TEW - Ew) / (TEW - REW)
 
-def fetch_weather_data(lat, lon, start_date, end_date, forecast=True, manual_data=None):
-    cache_key = f"{lat}_{lon}_{start_date}_{end_date}_{forecast}"
-    if cache_key in st.session_state.weather_cache:
-        return st.session_state.weather_cache[cache_key]
-    
-    # Manual input option removed—always use forecast (API)
-    if forecast:
-        if st.session_state.api_calls >= 1000:
-            st.warning("Daily API call limit reached.")
-            return None
-        if lat == 0 and lon == 0:
-            st.warning("Invalid lat/lon.")
-            return None
-        today = datetime.now().date()
-        maxf = today + timedelta(days=5)
-        if start_date < today or end_date > maxf:
-            st.warning("Adjusting forecast to next 5 days.")
-            start_date = today
-            end_date = today + timedelta(days=4)
-        api_key = "fe2d869569674a4afbfca57707bdf691"  # Replace with your API key
-        url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"
-        try:
-            resp = session.get(url, timeout=30)
-            resp.raise_for_status()
-            st.session_state.api_calls += 1
-            data = resp.json()
-            dd = {}
-            for entry in data['list']:
-                dt_ = datetime.fromtimestamp(entry['dt']).date()
-                if start_date <= dt_ <= end_date:
-                    ds = dt_.strftime("%Y-%m-%d")
-                    if ds not in dd:
-                        dd[ds] = {
-                            'tmax': entry['main']['temp_max'],
-                            'tmin': entry['main']['temp_min'],
-                            'precip': entry.get('rain', {}).get('3h', 0)
-                        }
-                    else:
-                        dd[ds]['tmax'] = max(dd[ds]['tmax'], entry['main']['temp_max'])
-                        dd[ds]['tmin'] = min(dd[ds]['tmin'], entry['main']['temp_min'])
-                        dd[ds]['precip'] += entry.get('rain', {}).get('3h', 0)
-            ds_sorted = sorted(dd.keys())
-            dates, ET0_list, precip_list = [], [], []
-            for dsi in ds_sorted:
-                d_date = pd.to_datetime(dsi)
-                dates.append(d_date)
-                tmax = dd[dsi]['tmax']
-                tmin = dd[dsi]['tmin']
-                if tmax < tmin:
-                    tmax, tmin = tmin, tmax
-                Ra = 10.0
-                Tmean = (tmax + tmin) / 2.0
-                eto_val = 0.0023 * Ra * (Tmean + 17.8) * ((tmax - tmin) ** 0.5)
-                ET0_list.append(max(0, eto_val))
-                precip_list.append(dd[dsi]['precip'])
-            wdf = pd.DataFrame({
-                "Date": dates,
-                "ET0": ET0_list,
-                "Precipitation": precip_list,
-                "Irrigation": [0] * len(dates)
-            }).sort_values("Date").reset_index(drop=True)
-            st.session_state.weather_cache[cache_key] = wdf
-            return wdf
-        except:
-            st.error("Unable to fetch forecast data.")
-            return None
-    else:
-        try:
-            start_str = start_date.strftime("%Y%m%d")
-            end_str = end_date.strftime("%Y%m%d")
-            url = f"https://power.larc.nasa.gov/api/temporal/daily/point?parameters=ALLSKY_SFC_SW_DWN,T2M,RH2M,PRECTOTCORR&community=AG&longitude={lon}&latitude={lat}&start={start_str}&end={end_str}&format=JSON"
-            r = session.get(url, timeout=30)
-            r.raise_for_status()
-            data = r.json()
-            dts = pd.date_range(start_date, end_date)
-            ET0_list, precip_list = [], []
-            for dt_ in dts:
-                ds = dt_.strftime("%Y%m%d")
-                rad_ = data['properties']['parameter']['ALLSKY_SFC_SW_DWN'].get(ds, 0)
-                eto_v = rad_ * 0.2
-                ET0_list.append(eto_v)
-                prec = data['properties']['parameter']['PRECTOTCORR'].get(ds, 0)
-                precip_list.append(prec)
-            wdf = pd.DataFrame({
-                "Date": dts,
-                "ET0": ET0_list,
-                "Precipitation": precip_list,
-                "Irrigation": [0] * len(dts)
-            })
-            st.session_state.weather_cache[cache_key] = wdf
-            return wdf
-        except:
-            st.warning("Unable to fetch historical weather data.")
-            return None
+def download_figure(fig):
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=600, bbox_inches="tight")
+    buf.seek(0)
+    return buf
 
 def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
                        track_drainage=True, enable_yield=False, Ym=0, Ky=0,
@@ -285,15 +192,12 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
     if weather_df.empty:
         st.error("Weather data is empty.")
         return None
-    
     NDAYS = len(weather_df)
-    
     crop_stages_df = crop_stages_df.sort_values("Start_Day").reset_index(drop=True)
     day_kcb = np.zeros(NDAYS)
     day_p   = np.zeros(NDAYS)
     day_ke  = np.zeros(NDAYS)
     day_root = np.zeros(NDAYS)
-    
     for i in range(len(crop_stages_df) - 1):
         st_i = int(crop_stages_df.iloc[i]['Start_Day']) - 1
         en_i = int(crop_stages_df.iloc[i]['End_Day']) - 1
@@ -305,18 +209,17 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
             continue
         kcb_s = crop_stages_df.iloc[i]['Kcb']
         kcb_e = crop_stages_df.iloc[i+1]['Kcb']
-        p_s   = crop_stages_df.iloc[i]['p']
-        p_e   = crop_stages_df.iloc[i+1]['p']
-        ke_s  = crop_stages_df.iloc[i]['Ke']
-        ke_e  = crop_stages_df.iloc[i+1]['Ke']
-        rd_s  = crop_stages_df.iloc[i]['Root_Depth_mm']
-        rd_e  = crop_stages_df.iloc[i+1]['Root_Depth_mm']
+        p_s = crop_stages_df.iloc[i]['p']
+        p_e = crop_stages_df.iloc[i+1]['p']
+        ke_s = crop_stages_df.iloc[i]['Ke']
+        ke_e = crop_stages_df.iloc[i+1]['Ke']
+        rd_s = crop_stages_df.iloc[i]['Root_Depth_mm']
+        rd_e = crop_stages_df.iloc[i+1]['Root_Depth_mm']
         L = en_i - st_i + 1
-        day_kcb[st_i:en_i+1]  = np.linspace(kcb_s, kcb_e, L)
-        day_p[st_i:en_i+1]    = np.linspace(p_s, p_e, L)
-        day_ke[st_i:en_i+1]   = np.linspace(ke_s, ke_e, L)
+        day_kcb[st_i:en_i+1] = np.linspace(kcb_s, kcb_e, L)
+        day_p[st_i:en_i+1] = np.linspace(p_s, p_e, L)
+        day_ke[st_i:en_i+1] = np.linspace(ke_s, ke_e, L)
         day_root[st_i:en_i+1] = np.linspace(rd_s, rd_e, L)
-    
     i_last = len(crop_stages_df) - 1
     st_l = int(crop_stages_df.iloc[i_last]['Start_Day']) - 1
     en_l = int(crop_stages_df.iloc[i_last]['End_Day']) - 1
@@ -327,46 +230,38 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
     if en_l > NDAYS - 1:
         en_l = NDAYS - 1
     if st_l <= en_l:
-        day_kcb[st_l:en_l+1]  = crop_stages_df.iloc[i_last]['Kcb']
-        day_p[st_l:en_l+1]    = crop_stages_df.iloc[i_last]['p']
-        day_ke[st_l:en_l+1]   = crop_stages_df.iloc[i_last]['Ke']
+        day_kcb[st_l:en_l+1] = crop_stages_df.iloc[i_last]['Kcb']
+        day_p[st_l:en_l+1] = crop_stages_df.iloc[i_last]['p']
+        day_ke[st_l:en_l+1] = crop_stages_df.iloc[i_last]['Ke']
         day_root[st_l:en_l+1] = crop_stages_df.iloc[i_last]['Root_Depth_mm']
     if en_l < NDAYS - 1:
         day_kcb[en_l+1:] = crop_stages_df.iloc[i_last]['Kcb']
-        day_p[en_l+1:]   = crop_stages_df.iloc[i_last]['p']
-        day_ke[en_l+1:]  = crop_stages_df.iloc[i_last]['Ke']
+        day_p[en_l+1:] = crop_stages_df.iloc[i_last]['p']
+        day_ke[en_l+1:] = crop_stages_df.iloc[i_last]['Ke']
         day_root[en_l+1:] = crop_stages_df.iloc[i_last]['Root_Depth_mm']
-    
     if dynamic_root:
         root_lin = np.linspace(init_root, max_root, min(days_to_max, NDAYS)).tolist()
         if NDAYS > days_to_max:
             root_lin += [max_root] * (NDAYS - days_to_max)
         day_root = np.array(root_lin[:NDAYS])
-    
     TEW = soil_df['TEW'].sum()
     REW = soil_df['REW'].sum()
     E_count = REW
-    
     SW_layers = [soil_df.iloc[j]['FC'] * soil_df.iloc[j]['Depth_mm'] for j in range(len(soil_df))]
-    
     results = []
     cumIrr = 0
     cumPrec = 0
-    
     for d_i in range(NDAYS):
         date_i = weather_df.iloc[d_i]['Date']
         ET0_i = max(0, weather_df.iloc[d_i]['ET0'])
         PR_i = max(0, weather_df.iloc[d_i]['Precipitation'])
         IR_i = max(0, weather_df.iloc[d_i]['Irrigation'])
-        
         cumIrr += IR_i
         cumPrec += PR_i
-        
         Kcb_i = day_kcb[d_i]
         p_i = day_p[d_i]
         ke0_i = day_ke[d_i]
         rd_i = max(1, day_root[d_i])
-        
         tot_depth = 0
         sum_FC = 0
         sum_WP = 0
@@ -390,17 +285,14 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
         TAW_ = (sum_FC - sum_WP)
         RAW_ = p_i * TAW_
         Dr_ = (sum_FC - SW_root)
-        
         Ks_ = compute_Ks(Dr_, RAW_, TAW_)
         Kr_ = compute_Kr(TEW, REW, E_count)
         Ke_ = Kr_ * ke0_i
-        
         ETc_ = (Kcb_i * Ks_ + Ke_) * ET0_i
         Etc_trans = Kcb_i * Ks_ * ET0_i
         Etc_evap = Ke_ * ET0_i
         infiltration = PR_i + IR_i
         runoff = 0
-        
         excess = infiltration - ETc_
         drainage = 0
         if track_drainage:
@@ -418,7 +310,6 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
                 SW_layers[j] = max(min_sw, min(max_sw, SW_layers[j]))
         else:
             drainage = 0
-        
         tr_rem = Etc_trans
         if tr_rem > 0 and SW_root > 0:
             tot_depth = 0
@@ -441,7 +332,6 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
                     tr_rem -= actual_remove
                     if tr_rem <= 0:
                         break
-        
         ev_rem = Etc_evap
         if ev_rem > 0:
             fc_0 = soil_df.iloc[0]['FC'] * soil_df.iloc[0]['Depth_mm']
@@ -450,13 +340,11 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
             actual_rm = min(ev_rem, available_0)
             SW_layers[0] -= actual_rm
             ev_rem -= actual_rm
-        
         if infiltration >= 4.0:
             E_count = 0.0
         else:
             E_count += Etc_evap
         E_count = max(0, min(E_count, TEW))
-        
         new_SWroot = 0
         tot_depth = 0
         sum_FC2 = 0
@@ -472,7 +360,6 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
             sum_FC2 += soil_df.iloc[j]['FC'] * layer_d * fraction
             tot_depth = new_d
         Dr_end = sum_FC2 - new_SWroot
-        
         yield_val = None
         if enable_yield:
             if Ym > 0 and Ky > 0 and ETc_ > 0:
@@ -480,11 +367,9 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
                 yield_val = max(0, y_val)
             if use_transp and WP_yield > 0:
                 yield_val = WP_yield * Etc_trans
-        
         leaching_val = 0
         if enable_leaching:
             leaching_val = drainage * 10 * (nitrate_conc * 1e-6) * 1000
-        
         day_out = {
             "Date": date_i,
             "ET0 (mm)": ET0_i,
@@ -514,9 +399,7 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
             day_out["Leaching (kg/ha)"] = leaching_val
         for j in range(len(SW_layers)):
             day_out[f"Layer{j}_SW (mm)"] = SW_layers[j]
-        
         results.append(day_out)
-    
     outdf = pd.DataFrame(results)
     return outdf
 
@@ -535,78 +418,79 @@ def create_auto_stages_for_crop(crop_name):
     stages.append({"Start_Day": init_d + dev_d + mid_d + 1, "End_Day": total_d, "Kcb": kcb_end, "Root_Depth_mm": 600, "p": 0.5, "Ke": 0.1})
     return pd.DataFrame(stages)
 
-def produce_irrigation_calendar(results_df):
+def produce_irrigation_calendar(simulation_date, forecast_wdf):
     """
-    Produces a wall-calendar–style display for the current month (next 30 days).
-    The calendar grid shows the day number, ET0, ETa, and recommended irrigation.
-    Recommended irrigation is based on a simple threshold: if Dr_end > RAW then recommend (Dr_end - RAW) mm.
+    Produces a 30-day calendar starting from simulation_date.
+    For the next 5 days (forecast period) it shows ET0 and ETa, and if ETa/ET0 < 0.8 then marks as "Irrigation Recommended".
+    For remaining days, only the date is shown.
+    Returns an HTML string for rendering.
     """
-    import calendar
-    now = datetime.now()
-    current_year = now.year
-    current_month = now.month
-    cal = calendar.monthcalendar(current_year, current_month)
+    # Forecast period: next 5 days from simulation_date
+    forecast_dict = {}
+    if forecast_wdf is not None and not forecast_wdf.empty:
+        forecast_wdf["Date"] = pd.to_datetime(forecast_wdf["Date"])
+        for _, row in forecast_wdf.iterrows():
+            d = row["Date"].date()
+            et0 = round(row["ET0"],1)
+            # For this demonstration, we assume ETa = (Kcb_mid*ET0) if no stress; use forecast ET0 multiplied by a factor.
+            # In a real tool, you'd compute forecast ETa with a crop model.
+            eta = round(row["ET0"] * 0.95,1)
+            ratio = eta / (et0 + 1e-9)
+            irrig_flag = "IRRIG. Recommended" if ratio < 0.8 else ""
+            forecast_dict[d] = {"ET0": et0, "ETa": eta, "Irrigation": irrig_flag}
     
-    # Create a dictionary of results for the current month from results_df
-    # We assume Date column is in datetime format
-    results_df["Date"] = pd.to_datetime(results_df["Date"])
-    month_data = results_df[results_df["Date"].dt.month == current_month].copy()
-    # We'll create a dict keyed by day
-    data_dict = {}
-    for _, row in month_data.iterrows():
-        day = row["Date"].day
-        rec = 0
-        if "Dr_end (mm)" in row and "RAW (mm)" in row and not pd.isnull(row["Dr_end (mm)"]) and not pd.isnull(row["RAW (mm)"]):
-            if row["Dr_end (mm)"] > row["RAW (mm)"]:
-                rec = round(row["Dr_end (mm)"] - row["RAW (mm)"], 1)
-        data_dict[day] = {
-            "ET0": round(row["ET0 (mm)"], 1),
-            "ETa": round(row["ETa (mm)"], 1),
-            "Irrigation": rec
-        }
-    
-    # Build HTML calendar table
-    html = f"<h3 style='text-align: center;'>{now.strftime('%B %Y')}</h3>"
-    html += "<table style='width:100%; border-collapse: collapse; text-align: center;'>"
-    # Table header with weekday names
+    # Create a 30-day calendar starting from simulation_date.
+    start_date = simulation_date
+    end_date = simulation_date + timedelta(days=29)
+    cal_html = f"<h3 style='text-align:center;'>{start_date.strftime('%B %Y')}</h3>"
+    cal_html += "<table style='width:100%; border-collapse: collapse; text-align: center;'>"
     weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    html += "<tr style='background-color:#1E3A8A; color:white;'>"
+    cal_html += "<tr style='background-color:#1E3A8A; color:white; font-size:12px;'>"
     for wd in weekdays:
-        html += f"<th style='padding: 5px; border: 1px solid #ddd; font-size: 12px;'>{wd}</th>"
-    html += "</tr>"
+        cal_html += f"<th style='padding:5px; border:1px solid #ddd;'>{wd}</th>"
+    cal_html += "</tr>"
     
-    for week in cal:
-        html += "<tr>"
-        for day in week:
-            if day == 0:
-                html += "<td style='padding: 5px; border: 1px solid #ddd; font-size: 12px;'>&nbsp;</td>"
-            else:
-                cell_data = data_dict.get(day, None)
-                if cell_data:
-                    cell_text = f"<strong>{day}</strong><br/>ET0: {cell_data['ET0']} mm<br/>ETa: {cell_data['ETa']} mm<br/>Irrig: {cell_data['Irrigation']} mm"
-                else:
-                    cell_text = f"<strong>{day}</strong><br/>&nbsp;"
-                html += f"<td style='padding: 5px; border: 1px solid #ddd; font-size: 12px; vertical-align: top;'>{cell_text}</td>"
-        html += "</tr>"
-    html += "</table>"
-    return html
-
-def download_figure(fig):
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=600, bbox_inches="tight")
-    buf.seek(0)
-    return buf
+    # Build list of dates from start_date to end_date
+    dates = [start_date + timedelta(days=x) for x in range(30)]
+    # Determine starting weekday index (0 for Monday)
+    first_weekday = start_date.weekday()
+    week = []
+    # Pre-pad the first week with empty cells if first_weekday > 0
+    for _ in range(first_weekday):
+        week.append("")
+    for d in dates:
+        cell_text = f"<strong>{d.day}</strong>"
+        if d in forecast_dict:
+            fd = forecast_dict[d]
+            cell_text += f"<br/>ET0: {fd['ET0']} mm<br/>ETa: {fd['ETa']} mm"
+            if fd["Irrigation"]:
+                cell_text += f"<br/><span style='color:red;'>IRRIG.</span>"
+        week.append(cell_text)
+        if len(week) == 7:
+            cal_html += "<tr>"
+            for cell in week:
+                cal_html += f"<td style='padding:5px; border:1px solid #ddd; font-size:12px; vertical-align:top;'>{cell}</td>"
+            cal_html += "</tr>"
+            week = []
+    if week:
+        while len(week) < 7:
+            week.append("")
+        cal_html += "<tr>"
+        for cell in week:
+            cal_html += f"<td style='padding:5px; border:1px solid #ddd; font-size:12px; vertical-align:top;'>{cell}</td>"
+        cal_html += "</tr>"
+    cal_html += "</table>"
+    return cal_html
 
 # --------------------------------------------------------------------------------
 # 6. SETUP TAB
-# Use small headers via CSS class "small-header"
 # --------------------------------------------------------------------------------
 with setup_tab:
     st.markdown("<span class='small-header'>1) Select Crop</span>", unsafe_allow_html=True)
     crop_list = list(CROP_DATABASE.keys())
     selected_crop = st.selectbox("Choose your crop", crop_list)
     st.write(f"**Selected Crop**: {selected_crop}")
-    st.write(f"- Kc_mid = {CROP_DATABASE[selected_crop]['Kc_mid']},  Kc_end = {CROP_DATABASE[selected_crop]['Kc_end']}")
+    st.write(f"- Kc_mid = {CROP_DATABASE[selected_crop]['Kc_mid']}, Kc_end = {CROP_DATABASE[selected_crop]['Kc_end']}")
     st.write(f"- Kcb_mid = {CROP_DATABASE[selected_crop]['Kcb_mid']}, Kcb_end = {CROP_DATABASE[selected_crop]['Kcb_end']}")
     
     st.markdown("<span class='small-header'>2) Weather Data</span>", unsafe_allow_html=True)
@@ -614,11 +498,10 @@ with setup_tab:
     
     st.markdown("<span class='small-header'>3) Crop Stage Data</span>", unsafe_allow_html=True)
     use_custom_stage = st.checkbox("Upload custom Crop Stage Data?", value=False)
-    st.write("*Otherwise, we'll compute automatically from known stage durations.*")
+    st.write("*Otherwise, stages will be auto-generated from default durations.*")
     custom_crop_file = None
     if use_custom_stage:
-        custom_crop_file = st.file_uploader("Upload Crop Stage CSV (columns: Start_Day, End_Day, Kcb, Root_Depth_mm, p, Ke)",
-                                             type=["csv","txt"])
+        custom_crop_file = st.file_uploader("Upload Crop Stage CSV (columns: Start_Day,End_Day,Kcb,Root_Depth_mm,p,Ke)", type=["csv","txt"])
     
     st.markdown("<span class='small-header'>4) Soil Layers Data</span>", unsafe_allow_html=True)
     soil_file = st.file_uploader("Upload soil data (Depth_mm, FC, WP, TEW, REW) or use default", type=["csv","txt"])
@@ -643,19 +526,15 @@ with setup_tab:
             wp_yield = 0
     with colB:
         enable_leaching = st.checkbox("Enable Leaching?", value=False)
-        nitrate_conc = 10.0
-        totalN = 100.0
-        lf = 0.1
-        if enable_leaching:
-            nitrate_conc = st.number_input("Nitrate mg/L", min_value=0.0, value=10.0)
-            totalN = st.number_input("Total N input (kg/ha)?", min_value=0.0, value=100.0)
-            lf = st.number_input("Leaching Fraction (0-1)?", min_value=0.0, max_value=1.0, value=0.1)
+        nitrate_conc = st.number_input("Nitrate mg/L", min_value=0.0, value=10.0)
+        totalN = st.number_input("Total N input (kg/ha)?", min_value=0.0, value=100.0)
+        lf = st.number_input("Leaching Fraction (0-1)?", min_value=0.0, max_value=1.0, value=0.1)
     
     st.markdown("<span class='small-header'>6) ETA Forecast (5-day) Options</span>", unsafe_allow_html=True)
     enable_forecast = st.checkbox("Enable 5-Day Forecast?", value=True)
-    # Removed manual forecast option—always use API forecast.
     lat_ = st.number_input("Latitude?", value=35.0)
     lon_ = st.number_input("Longitude?", value=-80.0)
+    # Manual forecast option removed; always use API forecast.
     manual_forecast_data = None
     
     st.markdown("<span class='small-header'>7) Dynamic Root Growth?</span>", unsafe_allow_html=True)
@@ -670,11 +549,9 @@ with setup_tab:
     
     st.markdown("<span class='small-header'>8) Run Simulation</span>", unsafe_allow_html=True)
     run_button = st.button("Run Simulation")
-    
     if run_button:
-        st.success("Simulation is now complete! Please open the 'Results' tab to see them.")
+        st.success("Simulation is now complete! Please open the 'Results' tab to view them.")
         st.session_state["simulation_done"] = True
-        
         if weather_file is not None:
             try:
                 wdf = pd.read_csv(weather_file)
@@ -685,7 +562,7 @@ with setup_tab:
                     wdf["Date"] = pd.to_datetime(wdf["Date"])
                 wdf = wdf.sort_values("Date").reset_index(drop=True)
             except:
-                st.warning("Could not parse the weather file. Using forecast.")
+                st.warning("Could not parse weather file. Using API forecast.")
                 startdt = datetime.now().date()
                 enddt = startdt + timedelta(days=4)
                 wdf = fetch_weather_data(lat_, lon_, startdt, enddt, forecast=True)
@@ -695,25 +572,22 @@ with setup_tab:
                 enddt = startdt + timedelta(days=4)
                 wdf = fetch_weather_data(lat_, lon_, startdt, enddt, forecast=True)
             else:
-                st.warning("No weather file and forecast disabled => no data. Stopping.")
+                st.warning("No weather data available. Stopping.")
                 st.stop()
-        
         if wdf is None or wdf.empty:
             st.error("No valid weather data. Stopping.")
             st.stop()
-        
         if use_custom_stage and custom_crop_file is not None:
             try:
                 stage_df = pd.read_csv(custom_crop_file)
             except:
-                st.error("Could not parse custom stage file. Using auto-generated stages.")
+                st.error("Could not parse custom crop stage file. Using auto-generated stages.")
                 stage_df = create_auto_stages_for_crop(selected_crop)
         elif use_custom_stage and custom_crop_file is None:
-            st.error("Custom stage selected but no file uploaded. Using auto-generated stages.")
+            st.error("Custom crop stage selected but no file uploaded. Using auto-generated stages.")
             stage_df = create_auto_stages_for_crop(selected_crop)
         else:
             stage_df = create_auto_stages_for_crop(selected_crop)
-        
         if soil_file is not None:
             try:
                 soil_df = pd.read_csv(soil_file)
@@ -734,7 +608,6 @@ with setup_tab:
                 "TEW": [20, 0],
                 "REW": [5, 0]
             })
-        
         res_df = simulate_SIMdualKc(
             weather_df=wdf,
             crop_stages_df=stage_df,
@@ -774,11 +647,8 @@ with results_tab:
                                results_df.to_csv(index=False),
                                file_name="results.csv",
                                mime="text/csv")
-            
-            # Dropdown for selecting chart type
             chart_choice = st.selectbox("Select Chart", 
                                         ["Daily ET Components", "Root Zone Depletion", "Daily Drainage", "Soil Water in Root Zone", "Yield", "Leaching"])
-            # Create and display chart based on selection with clean style (no grid lines) and 600 dpi download option
             if chart_choice == "Daily ET Components":
                 fig, ax = plt.subplots(figsize=(10,4))
                 ax.plot(results_df["Date"], results_df["ETa (mm)"], label="ETa total")
@@ -794,7 +664,7 @@ with results_tab:
                 fig, ax = plt.subplots(figsize=(10,4))
                 ax.plot(results_df["Date"], results_df["Dr_start (mm)"], label="Dr start")
                 ax.plot(results_df["Date"], results_df["Dr_end (mm)"], label="Dr end")
-                ax.set_xlabel("Date"); ax.set_ylabel("Depletion (mm)")
+                ax.set_xlabel("Date"); ax.set_ylabel("mm")
                 ax.legend(frameon=False)
                 ax.grid(False)
                 st.pyplot(fig)
@@ -811,9 +681,9 @@ with results_tab:
                 st.download_button("Download Chart", data=buf, file_name="daily_drainage.png", mime="image/png")
             elif chart_choice == "Soil Water in Root Zone":
                 fig, ax = plt.subplots(figsize=(10,4))
-                ax.plot(results_df["Date"], results_df["SW_root_start (mm)"], label="RootZ start")
-                ax.plot(results_df["Date"], results_df["SW_root_end (mm)"], label="RootZ end")
-                ax.set_xlabel("Date"); ax.set_ylabel("mm water")
+                ax.plot(results_df["Date"], results_df["SW_root_start (mm)"], label="Root Zone Start")
+                ax.plot(results_df["Date"], results_df["SW_root_end (mm)"], label="Root Zone End")
+                ax.set_xlabel("Date"); ax.set_ylabel("mm")
                 ax.legend(frameon=False)
                 ax.grid(False)
                 st.pyplot(fig)
@@ -845,12 +715,12 @@ with irrig_calendar_tab:
     if not st.session_state.get("simulation_done", False):
         st.info("Please run the simulation first.")
     else:
-        if st.session_state.results_df is None or st.session_state.results_df.empty:
-            st.warning("No results available.")
-        else:
-            st.markdown("## Irrigation Calendar for the Current Month")
-            # Generate a calendar for the current month (next 30 days forecast)
-            cal_html = produce_irrigation_calendar(st.session_state.results_df)
-            st.markdown(cal_html, unsafe_allow_html=True)
+        st.markdown("## Irrigation Calendar (30-day View)")
+        sim_date = datetime.now().date()
+        # Fetch 5-day forecast for irrigation calendar from API
+        forecast_wdf = fetch_weather_data(lat_, lon_, sim_date, sim_date + timedelta(days=4), forecast=True)
+        # Produce calendar HTML based on simulation date and forecast values for first 5 days.
+        cal_html = produce_irrigation_calendar(sim_date, forecast_wdf)
+        st.markdown(cal_html, unsafe_allow_html=True)
 
 st.markdown('<div class="footer">© 2025 Advanced AgriWaterBalance | Contact: support@agriwaterbalance.com</div>', unsafe_allow_html=True)
