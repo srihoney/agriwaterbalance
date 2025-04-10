@@ -12,27 +12,20 @@ from urllib3.util.retry import Retry
 import base64
 
 # --------------------------------------------------------------------------------
-# 1.  Built-in Kc Database
+# 1. Built-in Kc Database (from Pereira et al. 2021 updates for vegetables & field crops)
 # --------------------------------------------------------------------------------
-# The dictionaries below store mid-season (Kc_mid, Kcb_mid) and end-season (Kc_end, Kcb_end)
-# values for a variety of crops, following Pereira et al. (2021a) [vegetables]
-# and Pereira et al. (2021b) [field crops].
-# The user will select a crop name, and these data will be used in the simulation.
-
 KC_DATABASE = {
-    # --- Vegetables ---
+    # Vegetables
     "Carrot":        {"Kc_mid": 1.05, "Kc_end": 0.95, "Kcb_mid": 1.00, "Kcb_end": 0.90},
     "Beet":          {"Kc_mid": 1.10, "Kc_end": 0.95, "Kcb_mid": 1.05, "Kcb_end": 0.85},
     "Garlic":        {"Kc_mid": 1.05, "Kc_end": 0.70, "Kcb_mid": 1.00, "Kcb_end": 0.65},
     "Onion (fresh)": {"Kc_mid": 1.10, "Kc_end": 0.80, "Kcb_mid": 1.05, "Kcb_end": 0.75},
     "Onion (dry)":   {"Kc_mid": 1.10, "Kc_end": 0.65, "Kcb_mid": 1.05, "Kcb_end": 0.60},
-
     "Cabbage":       {"Kc_mid": 1.00, "Kc_end": 0.90, "Kcb_mid": 0.95, "Kcb_end": 0.85},
     "Lettuce":       {"Kc_mid": 1.00, "Kc_end": 0.95, "Kcb_mid": 0.95, "Kcb_end": 0.90},
     "Spinach":       {"Kc_mid": 1.00, "Kc_end": 0.95, "Kcb_mid": 0.95, "Kcb_end": 0.90},
     "Broccoli":      {"Kc_mid": 1.00, "Kc_end": 0.95, "Kcb_mid": 0.95, "Kcb_end": 0.90},
     "Cauliflower":   {"Kc_mid": 1.00, "Kc_end": 0.95, "Kcb_mid": 0.95, "Kcb_end": 0.90},
-
     "Green bean":    {"Kc_mid": 1.05, "Kc_end": 0.90, "Kcb_mid": 1.00, "Kcb_end": 0.85},
     "Tomato (fresh)":{"Kc_mid": 1.15, "Kc_end": 0.80, "Kcb_mid": 1.10, "Kcb_end": 0.75},
     "Tomato (proc)": {"Kc_mid": 1.15, "Kc_end": 0.70, "Kcb_mid": 1.10, "Kcb_end": 0.65},
@@ -44,12 +37,11 @@ KC_DATABASE = {
     "Watermelon":    {"Kc_mid": 1.05, "Kc_end": 0.70, "Kcb_mid": 1.00, "Kcb_end": 0.65},
     "Pumpkin":       {"Kc_mid": 1.05, "Kc_end": 0.70, "Kcb_mid": 1.00, "Kcb_end": 0.65},
     "Okra":          {"Kc_mid": 1.15, "Kc_end": 0.75, "Kcb_mid": 1.10, "Kcb_end": 0.70},
-
     "Basil":         {"Kc_mid": 1.00, "Kc_end": 0.80, "Kcb_mid": 0.95, "Kcb_end": 0.75},
     "Parsley":       {"Kc_mid": 1.00, "Kc_end": 0.85, "Kcb_mid": 0.95, "Kcb_end": 0.80},
     "Coriander":     {"Kc_mid": 1.00, "Kc_end": 0.85, "Kcb_mid": 0.95, "Kcb_end": 0.80},
 
-    # --- Field Crops ---
+    # Field Crops
     "Wheat":         {"Kc_mid": 1.15, "Kc_end": 0.35, "Kcb_mid": 1.10, "Kcb_end": 0.30},
     "Barley":        {"Kc_mid": 1.15, "Kc_end": 0.25, "Kcb_mid": 1.10, "Kcb_end": 0.20},
     "Maize":         {"Kc_mid": 1.20, "Kc_end": 0.60, "Kcb_mid": 1.15, "Kcb_end": 0.55},
@@ -66,19 +58,19 @@ KC_DATABASE = {
     "Mustard":       {"Kc_mid": 1.15, "Kc_end": 0.35, "Kcb_mid": 1.10, "Kcb_end": 0.30},
     "Faba bean":     {"Kc_mid": 1.15, "Kc_end": 0.65, "Kcb_mid": 1.10, "Kcb_end": 0.60},
     "Chickpea":      {"Kc_mid": 1.15, "Kc_end": 0.25, "Kcb_mid": 1.10, "Kcb_end": 0.20},
-    # ... add more as needed ...
 }
 
-
 # --------------------------------------------------------------------------------
-# 2.  Configure Requests Session with Retries
+# 2. Configure Requests Session with Retries
 # --------------------------------------------------------------------------------
 session = requests.Session()
-retries = Retry(total=5, backoff_factor=1.0, status_forcelist=[500, 502, 503, 504], allowed_methods=["GET"])
+retries = Retry(total=5, backoff_factor=1.0, 
+                status_forcelist=[500, 502, 503, 504],
+                allowed_methods=["GET"])
 session.mount('https://', HTTPAdapter(max_retries=retries))
 
 # --------------------------------------------------------------------------------
-# 3.  Streamlit Page Configuration & Logo
+# 3. Streamlit Page Configuration & Logo
 # --------------------------------------------------------------------------------
 st.set_page_config(page_title="Advanced AgriWaterBalance", layout="wide")
 
@@ -111,10 +103,17 @@ st.markdown(f"""
     .header-logo img {{ width: 100px; height: auto; }}
     .header-title {{ color: white; font-size: 36px; font-weight: bold; text-align: center; }}
     .sub-header {{ color: #1E3A8A; font-size: 24px; font-weight: bold; margin-top: 20px; }}
-    .footer {{ background-color: #1E3A8A; color: white; padding: 10px; text-align: center; position: fixed; bottom: 0; width: 100%; border-radius: 5px 5px 0 0; }}
-    .stButton>button {{ background-color: #2563EB; color: white; border-radius: 5px; padding: 10px 20px; font-size: 16px; }}
+    .footer {{
+        background-color: #1E3A8A; color: white; padding: 10px; text-align: center;
+        position: fixed; bottom: 0; width: 100%; border-radius: 5px 5px 0 0;
+    }}
+    .stButton>button {{
+        background-color: #2563EB; color: white; border-radius: 5px; padding: 10px 20px; font-size: 16px;
+    }}
     .stButton>button:hover {{ background-color: #1E40AF; }}
-    .stFileUploader {{ border: 2px dashed #1E3A8A; border-radius: 5px; padding: 10px; }}
+    .stFileUploader {{
+        border: 2px dashed #1E3A8A; border-radius: 5px; padding: 10px;
+    }}
     .stSelectbox {{ background-color: #F1F5F9; border-radius: 5px; }}
     .stNumberInput input {{ background-color: #F1F5F9; border-radius: 5px; }}
     </style>
@@ -130,10 +129,11 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 st.markdown("**A More Advanced Tool for Crop Water Management**", unsafe_allow_html=True)
 
+# Create 2 main tabs
 setup_tab, results_tab = st.tabs(["Setup Simulation", "View Results"])
 
 # --------------------------------------------------------------------------------
-# 4.  Session State
+# 4. Session State
 # --------------------------------------------------------------------------------
 if 'results_df' not in st.session_state:
     st.session_state.results_df = None
@@ -154,20 +154,19 @@ if st.session_state.last_reset_date != current_date:
     st.session_state.last_reset_date = current_date
 
 # --------------------------------------------------------------------------------
-# 5.  Core Water Balance & ET Functions
+# 5. Core Water Balance & ET Functions
 # --------------------------------------------------------------------------------
-
 def compute_Ks(SW, WP, FC, p):
     """
     Computes the water stress coefficient Ks based on:
-    Ks=1 when root zone depletion <= RAW
-    Otherwise Ks linearly decreases to 0 as depletion approaches TAW
-    SW in mm of water per m of soil depth (or per root depth).
-    WP, FC in volumetric fraction [m3/m3].
+      Ks = 1 if depletion <= RAW
+      else linearly down to 0 at TAW
+    SW, WP, FC as fraction volumes, or
+    SW in mm if converted, then TAW in mm, etc.
     """
     TAW = (FC - WP) * 1000.0  # total available water (mm/m)
-    RAW = p * TAW            # readily available water (mm/m)
-    Dr = (FC - SW) * 1000.0  # Depletion from field capacity
+    RAW = p * TAW
+    Dr = (FC - SW) * 1000.0
     if Dr <= RAW:
         Ks = 1.0
     else:
@@ -177,11 +176,9 @@ def compute_Ks(SW, WP, FC, p):
 
 def compute_Kr(TEW, REW, E):
     """
-    Kr is the evaporation reduction coefficient, depends on how much
-    of the TEW has been used for evaporation.
-    TEW: total evaporable water in the topsoil
-    REW: readily evaporable water
-    E: cumulative evaporation since the last major wetting
+    Evaporation reduction coefficient for topsoil layer.
+    TEW: total evaporable water, REW: readily evaporable water
+    E: cumulative evaporation since last major wetting
     """
     if E <= REW:
         Kr = 1.0
@@ -193,15 +190,14 @@ def compute_Kr(TEW, REW, E):
 def compute_ETc(Kcb, Ks, Ke, ET0):
     """
     Dual crop coefficient approach:
-    ETc = (Kcb*Ks + Ke) * ET0
+      ETc = (Kcb*Ks + Ke) * ET0
     """
     return (Kcb * Ks + Ke) * ET0
 
 def interpolate_crop_stages(crop_df, total_days):
     """
-    Interpolates the daily crop parameters (Kcb, root_depth, p, Ke)
-    from user-provided stage data (start_day -> end_day).
-    Typically we store the final arrays to be used day-by-day.
+    Builds daily arrays of (Kcb, root_depth, p, Ke)
+    by linear interpolation over user-defined stage intervals.
     """
     Kcb = np.zeros(total_days)
     root_depth = np.zeros(total_days)
@@ -212,49 +208,50 @@ def interpolate_crop_stages(crop_df, total_days):
         start_day = int(crop_df.iloc[i]['Start_Day'])
         end_day   = min(int(crop_df.iloc[i]['End_Day']), total_days)
         
-        Kcb_start       = crop_df.iloc[i]['Kcb']
-        Kcb_end         = crop_df.iloc[i+1]['Kcb']
-        root_start      = crop_df.iloc[i]['Root_Depth_mm']
-        root_end        = crop_df.iloc[i+1]['Root_Depth_mm']
-        p_start         = crop_df.iloc[i]['p']
-        p_end           = crop_df.iloc[i+1]['p']
-        Ke_start        = crop_df.iloc[i]['Ke']
-        Ke_end          = crop_df.iloc[i+1]['Ke']
+        Kcb_start  = crop_df.iloc[i]['Kcb']
+        Kcb_end    = crop_df.iloc[i+1]['Kcb']
+        rd_start   = crop_df.iloc[i]['Root_Depth_mm']
+        rd_end     = crop_df.iloc[i+1]['Root_Depth_mm']
+        p_start    = crop_df.iloc[i]['p']
+        p_end      = crop_df.iloc[i+1]['p']
+        Ke_start   = crop_df.iloc[i]['Ke']
+        Ke_end     = crop_df.iloc[i+1]['Ke']
         
         if i == 0 and start_day > 1:
             Kcb[0:start_day-1]        = 0
-            root_depth[0:start_day-1] = root_start
+            root_depth[0:start_day-1] = rd_start
             p[0:start_day-1]          = p_start
             Ke[0:start_day-1]         = Ke_start
         
         idx = np.arange(start_day - 1, end_day)
         if len(idx) > 0:
             Kcb[idx]        = np.linspace(Kcb_start, Kcb_end, len(idx))
-            root_depth[idx] = np.linspace(root_start, root_end, len(idx))
+            root_depth[idx] = np.linspace(rd_start, rd_end, len(idx))
             p[idx]          = np.linspace(p_start, p_end, len(idx))
             Ke[idx]         = np.linspace(Ke_start, Ke_end, len(idx))
     
+    # fill last stage
     last_i = len(crop_df) - 1
-    last_start_day = int(crop_df.iloc[last_i]['Start_Day'])
-    last_end_day   = min(int(crop_df.iloc[last_i]['End_Day']), total_days)
-    last_Kcb       = crop_df.iloc[last_i]['Kcb']
-    last_root      = crop_df.iloc[last_i]['Root_Depth_mm']
-    last_p         = crop_df.iloc[last_i]['p']
-    last_Ke        = crop_df.iloc[last_i]['Ke']
+    last_start = int(crop_df.iloc[last_i]['Start_Day'])
+    last_end   = min(int(crop_df.iloc[last_i]['End_Day']), total_days)
+    lastKcb    = crop_df.iloc[last_i]['Kcb']
+    lastRd     = crop_df.iloc[last_i]['Root_Depth_mm']
+    lastP      = crop_df.iloc[last_i]['p']
+    lastKe     = crop_df.iloc[last_i]['Ke']
     
-    if last_start_day <= total_days:
-        idx_last = np.arange(last_start_day - 1, last_end_day)
+    if last_start <= total_days:
+        idx_last = np.arange(last_start - 1, last_end)
         if len(idx_last) > 0:
-            Kcb[idx_last]        = last_Kcb
-            root_depth[idx_last] = last_root
-            p[idx_last]          = last_p
-            Ke[idx_last]         = last_Ke
+            Kcb[idx_last]        = lastKcb
+            root_depth[idx_last] = lastRd
+            p[idx_last]          = lastP
+            Ke[idx_last]         = lastKe
     
-    if last_end_day < total_days:
-        Kcb[last_end_day:]        = last_Kcb
-        root_depth[last_end_day:] = last_root
-        p[last_end_day:]          = last_p
-        Ke[last_end_day:]         = last_Ke
+    if last_end < total_days:
+        Kcb[last_end:]        = lastKcb
+        root_depth[last_end:] = lastRd
+        p[last_end:]          = lastP
+        Ke[last_end:]         = lastKe
     
     return Kcb, root_depth, p, Ke
 
@@ -265,244 +262,187 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
               enable_dynamic_root=False, initial_root_depth=None, max_root_depth=None, days_to_max=None,
               return_soil_profile=False, initial_SW_layers=None):
     """
-    This function implements a dual Kc water balance, computing daily ETa,
-    transpiration, evaporation, soil-water content in the root zone,
-    drainage, etc.
+    This function runs a dual Kc daily water balance over the entire
+    weather_df range. It produces a results table with daily:
+     - ET0, ETa_total, ETa_transp, ETa_evap
+     - Soil Water in root zone (SW_root)
+     - Per-layer SW as well
+     - Drainage, etc.
     """
     if weather_df.empty:
-        st.error("Weather data is empty. Please check your input.")
+        st.error("Weather data is empty.")
         return None
     
     total_days = len(weather_df)
     results = []
     
+    # Initialize layer water content
     if initial_SW_layers is None:
-        # Start soil water content at field capacity:
+        # start at Field Capacity
         SW_layers = [soil['FC'] * soil['Depth_mm'] for _, soil in soil_df.iterrows()]
     else:
         SW_layers = initial_SW_layers.copy()
     
-    # Cumulative soil evaporation since last wetting:
-    E = soil_df['REW'].sum()  # start "dry"
+    # Cumulative surface evap since last major wetting
+    E = soil_df['REW'].sum()
+    cum_irrig = 0.0
+    cum_precip = 0.0
     
-    cumulative_irrigation = 0.0
-    cumulative_precip = 0.0
-    
+    # Get daily arrays from crop_df
     Kcb_daily, root_depth_daily, p_daily, Ke_daily = interpolate_crop_stages(crop_df, total_days)
     
-    # If dynamic root growth is enabled, override root_depth_daily with a linear function:
-    if enable_dynamic_root and initial_root_depth is not None and max_root_depth is not None and days_to_max is not None:
-        # linearly from initial_root_depth to max_root_depth over days_to_max:
-        # If total_days > days_to_max, remain constant after that
-        dynamic_depth = np.linspace(initial_root_depth, max_root_depth, min(days_to_max, total_days)).tolist()
+    # If dynamic root growth, override root_depth
+    if enable_dynamic_root and initial_root_depth and max_root_depth and days_to_max:
+        dyn = np.linspace(initial_root_depth, max_root_depth, min(days_to_max, total_days)).tolist()
         if total_days > days_to_max:
-            dynamic_depth += [max_root_depth] * (total_days - days_to_max)
-        root_depth_daily = np.array(dynamic_depth[:total_days])
+            dyn += [max_root_depth]*(total_days - days_to_max)
+        root_depth_daily = np.array(dyn[:total_days])
     
-    for day in range(total_days):
-        date = weather_df.iloc[day]['Date']
-        ET0 = max(0, weather_df.iloc[day]['ET0'])
-        precip = max(0, weather_df.iloc[day]['Precipitation'])
-        irrig = max(0, weather_df.iloc[day]['Irrigation'])
+    for day_i in range(total_days):
+        date_i = weather_df.iloc[day_i]['Date']
+        ET0_i = max(0, weather_df.iloc[day_i]['ET0'])
+        prcp_i = max(0, weather_df.iloc[day_i]['Precipitation'])
+        irr_i  = max(0, weather_df.iloc[day_i]['Irrigation'])
         
-        cumulative_irrigation += irrig
-        cumulative_precip += precip
+        cum_irrig  += irr_i
+        cum_precip += prcp_i
         
-        # Retrieve daily Kcb, p, root depth, Ke
-        Kcb = max(0, Kcb_daily[day])
-        p   = max(0, min(1, p_daily[day]))
-        ke0 = max(0, Ke_daily[day])  # 'potential' Ke if no shortage in surface layer
-        root_depth = max(1, root_depth_daily[day])  # mm
+        # daily crop props
+        Kcb_i  = max(0, Kcb_daily[day_i])
+        p_i    = max(0, min(1, p_daily[day_i]))
+        ke0_i  = max(0, Ke_daily[day_i])
+        rd_i   = max(1, root_depth_daily[day_i])  # ensure >0
         
-        # Compute average WP, FC in the root zone:
-        total_depth = 0
+        # Determine average WP, FC in root zone
+        total_depth_covered = 0
         SW_root = 0
-        TAW_root = 0
-        RAW_root = 0
-        
         for j, soil in soil_df.iterrows():
-            layer_depth = soil['Depth_mm']
-            # track cumulative depth
-            new_total = total_depth + layer_depth
-            if new_total <= root_depth:
-                # entire layer is in root zone
-                SW_root += SW_layers[j]
-                TAW_root += (soil['FC'] - soil['WP']) * layer_depth
-                RAW_root += p * (soil['FC'] - soil['WP']) * layer_depth
-            elif total_depth < root_depth < new_total:
-                # partial layer
-                fraction = (root_depth - total_depth) / layer_depth
-                SW_root += SW_layers[j] * fraction
-                TAW_root += (soil['FC'] - soil['WP']) * layer_depth * fraction
-                RAW_root += p * (soil['FC'] - soil['WP']) * layer_depth * fraction
-            total_depth = new_total
+            layer_d = soil['Depth_mm']
+            new_d = total_depth_covered + layer_d
+            fraction_in_root = 0
+            if new_d <= rd_i:
+                fraction_in_root = 1.0
+            elif (total_depth_covered < rd_i < new_d):
+                fraction_in_root = (rd_i - total_depth_covered)/layer_d
+            # sum water in that portion
+            SW_root += SW_layers[j]* fraction_in_root
+            total_depth_covered = new_d
         
-        # Convert SW_root from mm of water to fraction? We'll do it as volumetric approach:
-        # Ks = f(SW fraction) -> we need SW fraction in root zone
-        # But below we do a simplified approach with average WP, FC in the root zone:
-        # We'll define average SW frac = SW_root / root_depth (since each mm of depth has 1 mm of water capacity)
+        # approximate average FC, WP in root zone:
+        # sum( FC_j * d_j ) over root zone / root_depth ...
+        # We'll do a simpler approach:
+        FC_avg = soil_df['FC'].mean()
+        WP_avg = soil_df['WP'].mean()
         
-        avg_SW_frac = SW_root / float(root_depth)
-        # average WP, FC for the root zone
-        if TAW_root <= 1e-6:
-            # fallback
-            zone_FC = soil_df['FC'].mean()
-            zone_WP = soil_df['WP'].mean()
-        else:
-            # approximate average
-            zone_FC = zone_WP = 0
-            # We'll guess an average from TAW_root => zone_FC - zone_WP
-            # This is a simpler approach for demonstration
-            zone_FC = zone_WP + (TAW_root / float(root_depth))  # WP + fraction that yields TAW in mm
-            # we guess WP from soil_df average or from fraction of TAW
-            zone_WP = soil_df['WP'].mean()
+        # compute Ks
+        avg_SW_frac = SW_root/float(rd_i)
+        Ks_i = compute_Ks(avg_SW_frac, WP_avg, FC_avg, p_i)
         
-        Ks = compute_Ks(avg_SW_frac, zone_WP, zone_FC, p)
-        # Soil evaporation coefficient:
-        # We adopt Kr * ke0 approach:
+        # Kr for topsoil
         TEW = soil_df['TEW'].sum()
         REW = soil_df['REW'].sum()
-        Kr = compute_Kr(TEW, REW, E)
-        Ke = Kr * ke0
+        Kr_i = compute_Kr(TEW, REW, E)
+        Ke_i = Kr_i * ke0_i
         
-        # Compute ETc
-        ETc = compute_ETc(Kcb, Ks, Ke, ET0)
-        
-        # Partition into transpiration and evaporation:
-        ETa_transp = max(0, Kcb * Ks * ET0)
-        ETa_evap   = max(0, Ke * ET0)
+        # daily ETc
+        ETc_i = compute_ETc(Kcb_i, Ks_i, Ke_i, ET0_i)
+        ETa_transp = max(0, Kcb_i*Ks_i*ET0_i)
+        ETa_evap   = max(0, Ke_i*ET0_i)
         ETa_total  = ETa_transp + ETa_evap
         
-        # Water input
-        water_input = precip + irrig
+        water_in   = prcp_i + irr_i
+        excess     = water_in - ETa_total
         
-        # Soil water update
         drainage = 0
-        # If track drainage is True, allow infiltration up to layer capacity,
-        # any excess is drainage
-        excess = water_input - ETa_total
         if track_drainage:
+            # fill layers to FC if we have excess
             for j in range(len(SW_layers)):
-                # Fill up layer j to FC if there's water
-                capacity = (soil_df.iloc[j]['FC'] * soil_df.iloc[j]['Depth_mm']) - SW_layers[j]
-                if capacity > 0 and excess > 0:
-                    added = min(excess, capacity)
-                    SW_layers[j] += added
-                    excess -= added
-            # leftover is deep drainage
+                capacity_j = (soil_df.iloc[j]['FC'] * soil_df.iloc[j]['Depth_mm']) - SW_layers[j]
+                if capacity_j>0 and excess>0:
+                    add_j = min(excess, capacity_j)
+                    SW_layers[j] += add_j
+                    excess -= add_j
+            # leftover -> drainage
             drainage = max(0, excess)
-            # ensure we do not exceed FC or drop below WP:
+            # ensure SW doesn't exceed FC or drop below WP
             for j in range(len(SW_layers)):
-                max_sw = soil_df.iloc[j]['FC'] * soil_df.iloc[j]['Depth_mm']
-                min_sw = soil_df.iloc[j]['WP'] * soil_df.iloc[j]['Depth_mm']
+                max_sw = soil_df.iloc[j]['FC']* soil_df.iloc[j]['Depth_mm']
+                min_sw = soil_df.iloc[j]['WP']* soil_df.iloc[j]['Depth_mm']
                 SW_layers[j] = min(max_sw, SW_layers[j])
                 SW_layers[j] = max(min_sw, SW_layers[j])
         else:
-            # simpler approach: remove ETa_total from SW_layers
-            drainage = 0
+            drainage=0
         
-        # remove transpiration portion from the root zone in proportion to that layer's fraction:
-        # remove evaporation portion from top layer(s) or from a topsoil reservoir E:
-        # For simplicity, we do it proportionally from each layer in the root zone
-        # Weighted by the fraction of SW in each layer
-        if ETa_total > 0 and SW_root > 0:
-            # fraction of total transpiration from each root layer
-            # total transp = ETa_transp, total SW in root zone is SW_root
-            # remove daily_result from layers in root zone
-            # Evap presumably from top layer, we can unify it:
-            transp_fraction = ETa_transp / ETa_total  if ETa_total>1e-9 else 0
-            evap_fraction   = ETa_evap / ETa_total    if ETa_total>1e-9 else 0
-            
-            # transp depletion from root zone only
-            # evap depletion from top "surface" (we skip the full detail).
-            # Here we do a simple approach: remove ETa_total proportionally from all layers in the root zone
+        # remove ET from layers in proportion to fraction in root zone
+        if ETa_total>0 and SW_root>0:
             to_remove = ETa_total
-            # gather total SW in root zone again
-            total_depth = 0
-            for j, soil in soil_df.iterrows():
-                layer_depth = soil['Depth_mm']
-                layer_capacity = SW_layers[j]
-                # check how much of this layer is in root zone:
-                # do the same partial approach
-                old_total = total_depth
-                new_total = old_total + layer_depth
-                fraction_in_root = 0
-                if new_total <= root_depth:
-                    fraction_in_root = 1.0
-                elif old_total < root_depth < new_total:
-                    fraction_in_root = (root_depth - old_total)/layer_depth
-                total_depth = new_total
-                
-                # remove a fraction_in_root of the ET from this layer
-                # Weighted by how much water is there
+            total_depth_covered=0
+            for j,soil in soil_df.iterrows():
+                layer_d = soil['Depth_mm']
+                old_d = total_depth_covered
+                new_d = old_d + layer_d
+                total_depth_covered = new_d
+                fraction_in_root=0
+                if new_d <= rd_i:
+                    fraction_in_root=1.0
+                elif old_d < rd_i < new_d:
+                    fraction_in_root = (rd_i - old_d)/layer_d
                 if fraction_in_root>0:
-                    # proportion of the total root zone water that is in this layer
-                    # but we can do a simpler approach to avoid overcomplication
-                    # remove in proportion to fraction_in_root:
-                    remove_here = to_remove * fraction_in_root
-                    # can't remove more than what's in the layer
-                    maxrem = layer_capacity - (soil['WP']*layer_depth)
-                    actual_rem = min(remove_here, maxrem)
-                    SW_layers[j] = layer_capacity - actual_rem
-                    to_remove -= actual_rem
-                    if to_remove <= 0:
+                    # remove from SW_layers[j] up to fraction_in_root
+                    maxrem_j = SW_layers[j] - (soil['WP']*layer_d)
+                    rem_j = min(to_remove*fraction_in_root, maxrem_j)
+                    SW_layers[j] -= rem_j
+                    to_remove   -= rem_j
+                    if to_remove<=0:
                         break
         
-        # Next, track E (cumulative evaporation from topsoil):
-        # E is used to compute Kr in subsequent days
-        # Increase E by ETa_evap if no major wetting (or if precip+irrig is small)
-        # If large wetting occurs (> ~4 mm), reset E=0
-        # We'll define a small threshold
-        if water_input >= 4.0:
-            E = 0.0
+        # update E for topsoil evaporation
+        if water_in >= 4.0:
+            E=0.0
         else:
-            E += ETa_evap
-        E = max(0, min(E, TEW))  # clamp
+            E+= ETa_evap
+        E = max(0, min(E, TEW))
         
-        # Collect daily results
         daily_result = {
-            "Date": date,
-            "ET0 (mm)": ET0,
+            "Date": date_i,
+            "ET0 (mm)": ET0_i,
+            "Precip (mm)": prcp_i,
+            "Irrig (mm)": irr_i,
             "ETa_total (mm)": ETa_total,
             "ETa_transp (mm)": ETa_transp,
             "ETa_evap (mm)": ETa_evap,
-            "Ks": Ks,
-            "Ke": Ke,
-            "SW_root (mm)": SW_root,  # water in root zone at start-of-day
-            "Cumulative_Irrigation (mm)": cumulative_irrigation,
-            "Cumulative_Precip (mm)": cumulative_precip,
-            "Root_Depth (mm)": root_depth,
+            "Ks": Ks_i,
+            "Ke": Ke_i,
+            "SW_root (mm)": SW_root,  # at start-of-day
+            "Root_Depth (mm)": rd_i,
             "Daily_Drainage (mm)": drainage,
+            "Cumulative_Irrigation (mm)": cum_irrig,
+            "Cumulative_Precip (mm)": cum_precip
         }
         
+        # optional yield
         if enable_yield:
-            if use_fao33 and Ym > 0 and Ky > 0 and ETc>0:
-                # approximate daily yield (just a day-slice; typically you do end-of-season)
-                Ya = Ym * (1 - Ky * (1 - (ETa_total / ETc)))
+            if use_fao33 and Ym>0 and Ky>0 and ETc_i>0:
+                Ya = Ym*(1 - Ky*(1 - (ETa_total/ETc_i)))
                 daily_result["Yield (ton/ha)"] = max(0, Ya)
-            if use_transp and WP_yield > 0:
-                # daily transp-based yield estimate
-                Ya_transp = WP_yield * ETa_transp
+            if use_transp and WP_yield>0:
+                Ya_transp = WP_yield*ETa_transp
                 daily_result["Yield (ton/ha)"] = Ya_transp
         
+        # optional leaching
         if enable_leaching:
-            leaching = 0
-            if leaching_method == "Method 1: Drainage × nitrate concentration" and drainage > 0:
-                # drainage mm -> m  => * concentration mg/L => kg/ha factor
-                # This is a simplistic approach
-                # 1 mm/ha = 10 m3/ha => convert mg->kg
-                # so (drainage mm) * 10 => m3/ha
-                # mg/L -> kg/m3 => factor 1e-6
-                leaching = drainage*10.0*(nitrate_conc*1e-6)*1000.0  # rough
-            elif leaching_method == "Method 2: Leaching Fraction × total N input":
-                # assume a daily fraction from total N input
-                leaching = leaching_fraction*(total_N_input/ total_days)
-            
-            daily_result["Leaching (kg/ha)"] = leaching
+            leach_val=0
+            if leaching_method=="Method 1: Drainage × nitrate concentration" and drainage>0:
+                # drainage mm => 1 mm/ha = 10 m3/ha => mg/L => kg/ha
+                leach_val = drainage*10.0*(nitrate_conc*1e-6)*1000.0
+            elif leaching_method=="Method 2: Leaching Fraction × total N input":
+                # daily fraction
+                leach_val = leaching_fraction*(total_N_input/float(total_days))
+            daily_result["Leaching (kg/ha)"] = leach_val
         
-        if enable_yield and total_N_input>0 and "Yield (ton/ha)" in daily_result:
-            # approximate Nitrogen use efficiency
-            daily_result["NUE (kg/ha)"] = daily_result["Yield (ton/ha)"]/ total_N_input
+        # store each layer's SW
+        for j in range(len(SW_layers)):
+            daily_result[f"Layer{j}_SW(mm)"] = SW_layers[j]
         
         results.append(daily_result)
     
@@ -519,7 +459,6 @@ def SIMdualKc(weather_df, crop_df, soil_df, track_drainage=True, enable_yield=Fa
         return results_df, final_soil_profile
     else:
         return results_df
-
 
 def fetch_weather_data(lat, lon, start_date, end_date, forecast=True, manual_data=None):
     """
@@ -544,21 +483,21 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=True, manual_dat
     
     if forecast:
         if st.session_state.api_calls >= 1000:
-            st.warning("Daily API call limit reached. Please try again later.")
+            st.warning("Daily API call limit reached.")
             return None
         
         if lat == 0.0 and lon == 0.0:
-            st.warning("Invalid coordinates. Please enter valid latitude and longitude.")
+            st.warning("Invalid coordinates. Provide valid lat/lon.")
             return None
         
         today = datetime.now().date()
         max_forecast_date = today + timedelta(days=5)
-        if start_date < today or end_date > max_forecast_date:
-            st.warning("Forecast date range is outside the valid period. Adjusting dates.")
+        if start_date < today or end_date> max_forecast_date:
+            st.warning("Forecast date range is outside valid period. Adjusting.")
             start_date = today
-            end_date = today + timedelta(days=4)
+            end_date   = today + timedelta(days=4)
         
-        api_key = "fe2d869569674a4afbfca57707bdf691"  # please use your own or environment variable
+        api_key = "fe2d869569674a4afbfca57707bdf691"
         url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"
         try:
             response = session.get(url, timeout=30)
@@ -569,37 +508,32 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=True, manual_dat
             daily_data = {}
             for entry in data['list']:
                 dt_date = datetime.fromtimestamp(entry['dt']).date()
-                if start_date <= dt_date <= end_date:
-                    date_str = dt_date.strftime("%Y-%m-%d")
-                    if date_str not in daily_data:
-                        daily_data[date_str] = {
+                if start_date<= dt_date <= end_date:
+                    dstr = dt_date.strftime("%Y-%m-%d")
+                    if dstr not in daily_data:
+                        daily_data[dstr] = {
                             'tmax': entry['main']['temp_max'],
                             'tmin': entry['main']['temp_min'],
-                            'precip': entry.get('rain', {}).get('3h', 0)
+                            'precip': entry.get('rain',{}).get('3h',0)
                         }
                     else:
-                        daily_data[date_str]['tmax'] = max(daily_data[date_str]['tmax'], entry['main']['temp_max'])
-                        daily_data[date_str]['tmin'] = min(daily_data[date_str]['tmin'], entry['main']['temp_min'])
-                        daily_data[date_str]['precip'] += entry.get('rain', {}).get('3h', 0)
+                        daily_data[dstr]['tmax'] = max(daily_data[dstr]['tmax'], entry['main']['temp_max'])
+                        daily_data[dstr]['tmin'] = min(daily_data[dstr]['tmin'], entry['main']['temp_min'])
+                        daily_data[dstr]['precip'] += entry.get('rain',{}).get('3h',0)
             
-            dates = []
-            ETo_list = []
-            precip_list = []
-            for date_str, values in daily_data.items():
-                dates.append(pd.to_datetime(date_str))
-                tmax = values['tmax']
-                tmin = values['tmin']
-                if tmax < tmin:
-                    tmax, tmin = tmin, tmax
-                # Simple Hargreaves-ish approach
-                Ra = 10  # fixed estimate of daily solar radiation [MJ/m2/d] for demonstration
-                Tmean = (tmax + tmin)/2
-                # ETo = 0.0023 * Ra * (Tmean+17.8)*((tmax - tmin)**0.5) # or
-                # We'll keep it consistent with your prior code
-                ETo = 0.0023 * Ra*(Tmean+17.8)*((tmax - tmin)**0.5)
-                ETo = max(0, ETo)
-                ETo_list.append(ETo)
-                precip_list.append(values['precip'])
+            dates, ETo_list, precip_list = [], [], []
+            for dstr, val in daily_data.items():
+                d_ = pd.to_datetime(dstr)
+                dates.append(d_)
+                tx, tn = val['tmax'], val['tmin']
+                if tx<tn: tx, tn= tn, tx
+                Ra = 10.0
+                Tmean = (tx+tn)/2
+                # simplified Hargreaves
+                ETo_ = 0.0023*Ra*(Tmean+17.8)*((tx-tn)**0.5)
+                ETo_ = max(0,ETo_)
+                ETo_list.append(ETo_)
+                precip_list.append(val['precip'])
             
             weather_df = pd.DataFrame({
                 "Date": dates,
@@ -611,22 +545,27 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=True, manual_dat
             st.session_state.weather_cache[cache_key] = weather_df
             return weather_df
         except:
-            st.error("Unable to fetch forecast data at this time. Please try again later.")
+            st.error("Unable to fetch forecast data now.")
             return None
     else:
-        # Historical data from NASA or any other source could be fetched
+        # historical data from NASA or others
         try:
             start_str = start_date.strftime("%Y%m%d")
             end_str   = end_date.strftime("%Y%m%d")
-            # NASA POWER example (not guaranteed)
             url = f"https://power.larc.nasa.gov/api/temporal/daily/point?parameters=ALLSKY_SFC_SW_DWN,T2M,RH2M,PRECTOTCORR&community=AG&longitude={lon}&latitude={lat}&start={start_str}&end={end_str}&format=JSON"
             response = session.get(url, timeout=30)
             response.raise_for_status()
             data = response.json()
-            
             dates = pd.date_range(start_date, end_date)
-            ET0_arr = [data['properties']['parameter']['ALLSKY_SFC_SW_DWN'].get(d.strftime("%Y%m%d"),0)*0.2 for d in dates]
-            precip_arr = [data['properties']['parameter']['PRECTOTCORR'].get(d.strftime("%Y%m%d"),0) for d in dates]
+            ET0_arr = []
+            precip_arr = []
+            for d_ in dates:
+                ds = d_.strftime("%Y%m%d")
+                rad_ = data['properties']['parameter']['ALLSKY_SFC_SW_DWN'].get(ds,0)
+                eto_ = rad_*0.2
+                p_   = data['properties']['parameter']['PRECTOTCORR'].get(ds,0)
+                ET0_arr.append(eto_)
+                precip_arr.append(p_)
             weather_df = pd.DataFrame({
                 "Date": dates,
                 "ET0": ET0_arr,
@@ -636,21 +575,57 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=True, manual_dat
             st.session_state.weather_cache[cache_key] = weather_df
             return weather_df
         except:
-            st.warning("Unable to fetch historical weather data. Please try again later.")
+            st.warning("Unable to fetch historical data now.")
             return None
 
+def irrigation_schedule(results_df, soil_df):
+    """
+    Simple post-processing approach to produce an irrigation scheduling calendar.
+    For demonstration, we define a threshold = 50% TAW:
+      If SW_root < 0.5 * TAW => recommend irrigation = TAW - SW_root
+    That is purely illustrative. You can refine as needed.
+    """
+    schedule = []
+    for i, row in results_df.iterrows():
+        date_i = row["Date"]
+        sw_root_i = row["SW_root (mm)"]  # at start-of-day
+        root_d_i  = row["Root_Depth (mm)"]
+        # approximate average FC, WP
+        FC_avg = soil_df['FC'].mean()
+        WP_avg = soil_df['WP'].mean()
+        TAW_i  = (FC_avg - WP_avg)*root_d_i
+        threshold = 0.5*TAW_i
+        if sw_root_i < threshold:
+            recommend = (TAW_i - sw_root_i)
+            if recommend>0:
+                schedule.append({
+                    "Date": date_i.strftime("%Y-%m-%d"),
+                    "Recommended_Irrigation_mm": round(recommend,1)
+                })
+    schedule_df = pd.DataFrame(schedule)
+    return schedule_df
 
 # --------------------------------------------------------------------------------
-# 6.  Streamlit UI
+# 6. Streamlit UI - Setup Tab
 # --------------------------------------------------------------------------------
 with setup_tab:
     st.markdown('<div class="sub-header">Input Data Configuration</div>', unsafe_allow_html=True)
     
+    st.write("#### Available Crops (built-in) for Forecasting Actual ET:")
+    st.write(list(KC_DATABASE.keys()))
+    
+    # Let user choose crop
+    st.write("Please select your crop type (for 5-day ET forecast):")
+    selected_crop = st.selectbox("Pick a crop", list(KC_DATABASE.keys()))
+    st.write(f"**Selected Crop** = {selected_crop}")
+    st.write(f" - Kc_mid={KC_DATABASE[selected_crop]['Kc_mid']}, Kc_end={KC_DATABASE[selected_crop]['Kc_end']}")
+    st.write(f" - Kcb_mid={KC_DATABASE[selected_crop]['Kcb_mid']}, Kcb_end={KC_DATABASE[selected_crop]['Kcb_end']}")
+    
     with st.container():
-        st.markdown("#### Upload Input Files")
+        st.markdown("### Upload Input Files")
         
         with st.expander("Weather Data"):
-            st.write("Upload a text file with columns: Date, ET0, Precipitation, Irrigation")
+            st.write("Upload a text file with columns: Date,ET0,Precipitation,Irrigation (or rely on forecast).")
             weather_file = st.file_uploader("Weather Data File (.txt)", type="txt", key="weather")
             sample_weather = pd.DataFrame({
                 "Date": ["2025-01-01","2025-01-02","2025-01-03"],
@@ -658,29 +633,15 @@ with setup_tab:
                 "Precipitation": [0.0, 2.0, 0.0],
                 "Irrigation": [0.0, 0.0, 10.0]
             })
-            st.download_button("Download Sample Weather Data", sample_weather.to_csv(index=False), file_name="weather_sample.txt", mime="text/plain")
-        
-        with st.expander("Select Crop Type (From Built-In Database)"):
-            st.write("Below is a curated list of crops with mid/end-season Kc and Kcb from Pereira et al. (2021).")
-            selected_crop = st.selectbox("Pick Your Crop", list(KC_DATABASE.keys()), index=0)
-            st.write(f"**Selected Crop**: {selected_crop}")
-            st.write("Standard Kc_mid = ", KC_DATABASE[selected_crop]["Kc_mid"],
-                     ", Kc_end = ", KC_DATABASE[selected_crop]["Kc_end"])
-            st.write("Basal Kcb_mid = ", KC_DATABASE[selected_crop]["Kcb_mid"],
-                     ", Kcb_end = ", KC_DATABASE[selected_crop]["Kcb_end"])
-            st.markdown("""
-                *Note:* These values assume sub-humid climate (RHmin≈45%, u2≈2 m/s). 
-                For significantly different climates, you may adjust them.
-            """)
+            st.download_button("Download Sample Weather Data",
+                               sample_weather.to_csv(index=False),
+                               file_name="weather_sample.txt",mime="text/plain")
         
         with st.expander("Crop Stage Data"):
-            st.write("""
-                If you prefer a 2-stage or 4-stage approach with daily Kcb, root depth, p, and Ke, 
-                upload your custom data. Otherwise, we’ll just create a minimal 2-stage table 
-                that uses the mid-/end-season Kc or Kcb from the built-in database.
-            """)
-            use_custom_crop_file = st.checkbox("Use a custom crop file instead of the built-in database?", value=False)
-            
+            st.write("""If you prefer a multi-stage approach, upload a custom CSV with 
+            columns: Start_Day,End_Day,Kcb,Root_Depth_mm,p,Ke. 
+            Or do a minimal approach using mid/end from built-in DB.""")
+            use_custom_crop_file = st.checkbox("Use a custom crop file instead of a minimal approach?", value=False)
             if use_custom_crop_file:
                 crop_file = st.file_uploader("Crop Stage Data File (.txt)", type="txt", key="crop")
                 sample_crop = pd.DataFrame({
@@ -691,37 +652,16 @@ with setup_tab:
                     "p":[0.5, 0.55],
                     "Ke":[1.0, 0.2]
                 })
-                st.download_button("Download Sample Crop Data", sample_crop.to_csv(index=False),
-                                  file_name="crop_sample.txt", mime="text/plain")
+                st.download_button("Download Sample Crop Data",
+                                   sample_crop.to_csv(index=False),
+                                   file_name="crop_sample.txt", mime="text/plain")
             else:
-                # We'll auto-build a 2-stage table: from day=1 to day= (some user-chosen?), 
-                # with mid-season and end-season
-                st.write("Enter an approximate total crop duration (days). We’ll build a minimal 2-stage Kcb table.")
-                approximate_duration = st.number_input("Crop Cycle (days)", min_value=30, value=90, step=1)
-                # We can store a simple 2-row DF:
-                # row 1 -> start=1, end=round(approx_duration*0.7), Kcb= Kcb_mid*0.5 as an example
-                # row 2 -> start= round(approx_duration*0.7+1), end=approx_duration, Kcb=Kcb_end
-                # For demonstration, let's do a 2-stage approach: 
-                stage1_end = int(round(0.7*approx_duration))
-                # We'll guess the Kcb at mid for stage 1, and Kcb_end for stage 2, but 
-                # typically you'd want a 4-stage approach. 
-                
-                # We'll define p and Ke somewhat arbitrarily or let the user define them:
-                default_p = 0.5
-                default_Ke = 0.1
-                
-                auto_crop_df = pd.DataFrame({
-                    "Start_Day":[1, stage1_end+1],
-                    "End_Day":[stage1_end, approximate_duration],
-                    "Kcb":[KC_DATABASE[selected_crop]["Kcb_mid"], KC_DATABASE[selected_crop]["Kcb_end"]],
-                    "Root_Depth_mm":[300, 600],
-                    "p":[default_p, default_p],
-                    "Ke":[default_Ke, default_Ke]
-                })
-                st.dataframe(auto_crop_df)
+                st.write("We'll generate a minimal 2-stage approach using mid/end from the built-in DB.")
+                approximate_duration = st.number_input("Approx Crop Cycle (days)?", min_value=30, value=90, step=1)
+                st.session_state["approximate_duration"] = approximate_duration
         
         with st.expander("Soil Layers Data"):
-            st.write("Upload a text file with columns: Depth_mm, FC, WP, TEW, REW")
+            st.write("Upload text file w/ columns: Depth_mm, FC, WP, TEW, REW.")
             soil_file = st.file_uploader("Soil Layers File (.txt)", type="txt", key="soil")
             sample_soil = pd.DataFrame({
                 "Depth_mm":[200, 100],
@@ -730,172 +670,184 @@ with setup_tab:
                 "TEW":[20, 0],
                 "REW":[5, 0]
             })
-            st.download_button("Download Sample Soil Data", sample_soil.to_csv(index=False), file_name="soil_sample.txt", mime="text/plain")
+            st.download_button("Download Sample Soil Data",
+                               sample_soil.to_csv(index=False),
+                               file_name="soil_sample.txt", mime="text/plain")
     
     with st.container():
-        st.markdown("#### Additional Features")
+        st.markdown("### Additional Features")
         
         with st.expander("Simulation Options"):
-            track_drainage = st.checkbox("Track Drainage", value=True)
-            enable_yield = st.checkbox("Enable Yield Estimation", value=False)
+            track_drainage = st.checkbox("Track Drainage?", value=True)
+            enable_yield   = st.checkbox("Enable Yield Estimation?", value=False)
             if enable_yield:
-                st.markdown("**Yield Estimation Options**")
-                use_fao33 = st.checkbox("Use FAO-33 Ky-based method", value=True)
+                st.markdown("**Yield Options**")
+                use_fao33 = st.checkbox("FAO-33 Ky-based method?", value=True)
                 if use_fao33:
-                    Ym = st.number_input("Maximum Yield (Ym, ton/ha)", min_value=0.0, value=10.0, step=0.1)
-                    Ky = st.number_input("Yield Response Factor (Ky)", min_value=0.0, value=1.0, step=0.1)
+                    Ym = st.number_input("Max Yield (ton/ha)", min_value=0.0, value=10.0, step=0.1)
+                    Ky = st.number_input("Yield Response Factor Ky", min_value=0.0, value=1.0, step=0.1)
                 else:
-                    Ym = 0
-                    Ky = 0
-                use_transp = st.checkbox("Use Transpiration-based method (WP_yield)", value=False)
+                    Ym = Ky = 0
+                use_transp = st.checkbox("Transpiration-based (WP_yield)?", value=False)
                 if use_transp:
-                    WP_yield = st.number_input("Yield Water Productivity (WP_yield, ton/ha per mm)", 
-                                               min_value=0.0, value=0.01, step=0.001)
+                    WP_yield = st.number_input("WP_yield (ton/ha per mm)", min_value=0.0, value=0.01, step=0.001)
                 else:
-                    WP_yield = 0
+                    WP_yield=0
             else:
-                use_fao33 = use_transp = False
-                Ym = Ky = WP_yield = 0
+                use_fao33=use_transp=False
+                Ym=Ky=WP_yield=0
             
-            enable_leaching = st.checkbox("Enable Leaching Estimation", value=False)
+            enable_leaching = st.checkbox("Enable Leaching?", value=False)
             if enable_leaching:
-                leaching_method = st.radio("Select Leaching Method", 
-                                           ["Method 1: Drainage × nitrate concentration", 
-                                            "Method 2: Leaching Fraction × total N input"])
-                if leaching_method == "Method 1: Drainage × nitrate concentration":
-                    nitrate_conc = st.number_input("Nitrate Concentration (mg/L)", min_value=0.0, value=10.0, step=0.1)
-                    total_N_input = 0
-                    leaching_fraction = 0
+                leaching_method = st.radio("Leaching Method", ["Method 1: Drainage × nitrate concentration",
+                                                               "Method 2: Leaching Fraction × total N input"])
+                if leaching_method=="Method 1: Drainage × nitrate concentration":
+                    nitrate_conc = st.number_input("Nitrate mg/L", value=10.0, step=0.1)
+                    total_N_input=0
+                    leaching_fraction=0
                 else:
-                    total_N_input = st.number_input("Total N Input (kg/ha)", min_value=0.0, value=100.0, step=1.0)
-                    leaching_fraction = st.number_input("Leaching Fraction (0-1)", min_value=0.0, max_value=1.0, value=0.1, step=0.01)
-                    nitrate_conc = 0
+                    total_N_input     = st.number_input("Total N input (kg/ha)?", value=100.0, step=1.0)
+                    leaching_fraction = st.number_input("Leaching Fraction (0-1)?", value=0.1, step=0.01)
+                    nitrate_conc=0
             else:
-                leaching_method = ""
-                nitrate_conc = total_N_input = leaching_fraction = 0
+                leaching_method=""
+                nitrate_conc=total_N_input=leaching_fraction=0
             
-            enable_etaforecast = st.checkbox("Enable 5-Day ETa Forecast", value=True)
+            enable_etaforecast = st.checkbox("Enable 5-Day ET Forecast?", value=True)
             manual_forecast_data = None
             if enable_etaforecast:
-                st.write("Enter your field's coordinates for the next 5-day weather forecast.")
-                forecast_lat = st.number_input("Field Latitude", value=35.0)
-                forecast_lon = st.number_input("Field Longitude", value=-80.0)
-                
-                use_manual_input = st.checkbox("Use Manual Weather Forecast Input", value=False)
+                st.write("Enter your field coordinates for the forecast.")
+                forecast_lat = st.number_input("Lat", value=35.0)
+                forecast_lon = st.number_input("Lon", value=-80.0)
+                use_manual_input = st.checkbox("Manual 5-day forecast input?", value=False)
                 if use_manual_input:
-                    st.write("Provide daily weather data for the next 5 days.")
-                    tmax_values, tmin_values, precip_values = [], [], []
+                    tmax_vals, tmin_vals, prcp_vals=[],[],[]
                     for i in range(5):
-                        st.write(f"**Day {i+1}**")
-                        tmax = st.number_input(f"Max Temp (°C) Day {i+1}", value=25.0, key=f"tmax_{i}")
-                        tmin = st.number_input(f"Min Temp (°C) Day {i+1}", value=15.0, key=f"tmin_{i}")
-                        prcp = st.number_input(f"Precip (mm) Day {i+1}", value=0.0, key=f"precip_{i}")
-                        tmax_values.append(tmax)
-                        tmin_values.append(tmin)
-                        precip_values.append(prcp)
-                    eto_values = []
-                    for (tx, tn) in zip(tmax_values, tmin_values):
-                        if tx<tn: tx, tn = tn, tx
-                        Ra = 10
-                        Tmean = (tx+tn)/2
-                        ETo_temp = 0.0023*Ra*(Tmean+17.8)*((tx-tn)**0.5)
-                        ETo_temp = max(0,ETo_temp)
-                        eto_values.append(ETo_temp)
+                        st.write(f"Day {i+1}")
+                        tx_ = st.number_input(f"Max Temp (°C)? day {i+1}", value=25.0, key=f"tx_{i}")
+                        tn_ = st.number_input(f"Min Temp (°C)? day {i+1}", value=15.0, key=f"tn_{i}")
+                        pp_ = st.number_input(f"Precip (mm)? day {i+1}", value=0.0, key=f"pp_{i}")
+                        tmax_vals.append(tx_)
+                        tmin_vals.append(tn_)
+                        prcp_vals.append(pp_)
+                    eto_vals=[]
+                    for tx_, tn_ in zip(tmax_vals, tmin_vals):
+                        if tx_<tn_: tx_, tn_= tn_, tx_
+                        Ra=10
+                        Tmean=(tx_+tn_)/2
+                        ETo_ = 0.0023*Ra*(Tmean+17.8)*((tx_-tn_)**0.5)
+                        ETo_ = max(0,ETo_)
+                        eto_vals.append(ETo_)
                     manual_forecast_data = {
-                        'tmax': tmax_values,
-                        'tmin': tmin_values,
-                        'precip': precip_values,
-                        'eto': eto_values
+                        "tmax": tmax_vals,
+                        "tmin": tmin_vals,
+                        "precip": prcp_vals,
+                        "eto": eto_vals
                     }
             else:
-                forecast_lat = forecast_lon = 0.0
+                forecast_lat=forecast_lon=0.0
             
-            enable_nue = st.checkbox("Enable NUE Estimation (only if yield is computed)?", value=False)
-            enable_dynamic_root = st.checkbox("Enable Dynamic Root Growth", value=False)
+            enable_dynamic_root= st.checkbox("Dynamic Root Growth?", value=False)
             if enable_dynamic_root:
-                initial_root_depth = st.number_input("Initial Root Depth (mm)", min_value=50, value=300, step=10)
-                max_root_depth = st.number_input("Maximum Root Depth (mm)", min_value=50, value=1000, step=10)
-                days_to_max = st.number_input("Days to Max Root Depth", min_value=1, value=60, step=1)
+                initial_root_depth= st.number_input("Initial Root Depth (mm)", min_value=50, value=300, step=10)
+                max_root_depth    = st.number_input("Max Root Depth (mm)", min_value=50, value=1000, step=10)
+                days_to_max       = st.number_input("Days to Max Root Depth", min_value=1, value=60, step=1)
             else:
-                initial_root_depth = max_root_depth = days_to_max = None
+                initial_root_depth=max_root_depth=days_to_max=None
             
-            show_soil_profile = st.checkbox("Show Soil Profile Water Storage after simulation?", value=False)
+            show_soil_profile = st.checkbox("Show final soil profile water storage?", value=False)
     
     st.button("Run Simulation", key="run_simulation")
 
-    # If user clicked "Run Simulation":
+# --------------------------------------------------------------------------------
+# 7. Streamlit UI - Results Tab
+# --------------------------------------------------------------------------------
+with results_tab:
     if st.session_state.get('run_simulation', False):
-        # 1) Read weather data (uploaded or not)
+        # Attempt reading weather
+        # If user uploaded weather_file => read it, else we do a demonstration
+        if 'approximate_duration' not in st.session_state:
+            st.session_state['approximate_duration'] = 90
+        
         if weather_file is not None:
             try:
                 weather_df = pd.read_csv(weather_file)
-                # parse Date
                 if pd.api.types.is_string_dtype(weather_df['Date']):
                     weather_df['Date'] = pd.to_datetime(weather_df['Date'])
-                weather_df = weather_df.sort_values('Date').reset_index(drop=True)
+                weather_df = weather_df.sort_values("Date").reset_index(drop=True)
             except:
-                st.error("Failed to read uploaded weather file.")
+                st.error("Failed reading weather file.")
                 st.stop()
         else:
-            # if no file, user must have a daily weather for sim
-            # minimal approach: we do an example
-            st.warning("No weather data file. Will attempt a demonstration 5-day forecast for the chosen lat/lon.")
-            start_date = datetime.now().date()
-            end_date   = start_date + timedelta(days=4)
-            weather_df = fetch_weather_data(forecast_lat, forecast_lon, start_date, end_date, forecast=True,
+            # do a minimal 5-day fetch
+            st.warning("No weather file => We'll fetch 5-day forecast from your lat/lon as demonstration.")
+            start_dt = datetime.now().date()
+            end_dt   = start_dt + timedelta(days=4)
+            weather_df = fetch_weather_data(forecast_lat, forecast_lon, start_dt, end_dt, forecast=True, 
                                             manual_data=None)
             if weather_df is None or weather_df.empty:
-                st.error("No weather data available. Please upload or provide data.")
+                st.error("No valid weather data. Please re-check.")
                 st.stop()
         
-        # 2) Crop data
+        # Crop data
+        use_custom_crop_file = st.session_state.get('use_custom_crop_file', False)
+        if 'approximate_duration' in st.session_state:
+            approximate_duration= st.session_state['approximate_duration']
+        else:
+            approximate_duration=90
+        
+        # Because user might not have used a toggle, let's see:
+        if use_custom_crop_file and 'crop_file' in st.session_state:
+            pass
+        # We'll just define a local approach:
         if use_custom_crop_file:
+            # we try to read from the UI
+            if 'crop' in st.session_state and st.session_state['crop'] is not None:
+                try:
+                    crop_file = st.session_state['crop']
+                except:
+                    crop_file=None
+            else:
+                crop_file=None
             if crop_file is not None:
                 try:
                     crop_df = pd.read_csv(crop_file)
                     crop_df = crop_df.sort_values("Start_Day").reset_index(drop=True)
                 except:
-                    st.error("Failed to read uploaded crop stage file.")
+                    st.error("Could not parse uploaded crop file. Stopping.")
                     st.stop()
             else:
-                st.error("Please upload a crop stage file or uncheck 'Use custom crop file'.")
+                st.error("You selected 'use custom crop file' but no file uploaded.")
                 st.stop()
         else:
-            # create a minimal 2-row DataFrame from user selection
-            approximate_duration = st.session_state.get('approximate_duration', 90)
-            # we re-construct the same logic as above:
-            # we have "auto_crop_df" in the UI but we need to store it or reconstruct
-            # for simplicity, let's re-do it quickly:
-            if 'approximate_duration' in st.session_state:
-                approximate_duration = st.session_state['approximate_duration']
-            else:
-                approximate_duration = 90
-            
+            # build minimal 2-stage from Kcb_mid, Kcb_end from KC_DATABASE
+            kcb_mid = KC_DATABASE[selected_crop]['Kcb_mid']
+            kcb_end = KC_DATABASE[selected_crop]['Kcb_end']
             stage1_end = int(round(0.7*approximate_duration))
-            default_p = 0.5
-            default_Ke = 0.1
-            kcb_mid = KC_DATABASE[selected_crop]["Kcb_mid"]
-            kcb_end = KC_DATABASE[selected_crop]["Kcb_end"]
-            
             auto_crop_df = pd.DataFrame({
                 "Start_Day":[1, stage1_end+1],
                 "End_Day":[stage1_end, approximate_duration],
                 "Kcb":[kcb_mid, kcb_end],
                 "Root_Depth_mm":[300, 600],
-                "p":[default_p, default_p],
-                "Ke":[default_Ke, default_Ke]
+                "p":[0.5,0.5],
+                "Ke":[0.15,0.1]
             })
             crop_df = auto_crop_df
         
-        # 3) Soil data
+        # Soil data
         if soil_file is not None:
             try:
                 soil_df = pd.read_csv(soil_file)
             except:
-                st.error("Failed to read soil file.")
-                st.stop()
+                st.error("Failed to read soil file => using a 2-layer default.")
+                soil_df = pd.DataFrame({
+                    "Depth_mm":[200, 100],
+                    "FC":[0.30, 0.30],
+                    "WP":[0.15, 0.15],
+                    "TEW":[20, 0],
+                    "REW":[5, 0]
+                })
         else:
-            st.warning("No soil file. Will use a default 2-layer soil.")
             soil_df = pd.DataFrame({
                 "Depth_mm":[200, 100],
                 "FC":[0.30, 0.30],
@@ -904,175 +856,152 @@ with setup_tab:
                 "REW":[5, 0]
             })
         
-        # 4) Run water balance on uploaded weather data
-        if weather_df is not None and not weather_df.empty:
-            total_days = len(weather_df)
-            # Force the last day in crop_df to match total_days
-            crop_df.loc[crop_df.index[-1],"End_Day"] = total_days
+        # run main simulation
+        total_days = len(weather_df)
+        # force last row in crop_df
+        crop_df.loc[crop_df.index[-1],"End_Day"] = total_days
+        
+        results_df, final_soil_profile = SIMdualKc(
+            weather_df=weather_df,
+            crop_df=crop_df,
+            soil_df=soil_df,
+            track_drainage=track_drainage,
+            enable_yield=enable_yield,
+            use_fao33=use_fao33,
+            Ym=Ym,
+            Ky=Ky,
+            use_transp=use_transp,
+            WP_yield=WP_yield,
+            enable_leaching=enable_leaching,
+            leaching_method=leaching_method,
+            nitrate_conc=nitrate_conc,
+            total_N_input=total_N_input,
+            leaching_fraction=leaching_fraction,
+            enable_dynamic_root=enable_dynamic_root,
+            initial_root_depth=initial_root_depth,
+            max_root_depth=max_root_depth,
+            days_to_max=days_to_max,
+            return_soil_profile=True
+        )
+        st.session_state.results_df = results_df
+        st.session_state.soil_profile = final_soil_profile
+        
+        # do the 5-day forecast if requested
+        if enable_etaforecast:
+            last_layer_sw = [ly['SW (mm)'] for ly in final_soil_profile]
+            # minimal 1-stage approach for next 5 days
+            forecast_crop_df = pd.DataFrame({
+                "Start_Day":[1],
+                "End_Day":[5],
+                "Kcb":[KC_DATABASE[selected_crop]["Kcb_end"]], 
+                "Root_Depth_mm":[600],
+                "p":[0.5],
+                "Ke":[0.1]
+            })
+            forecast_start = datetime.now().date()
+            forecast_end   = forecast_start + timedelta(days=4)
+            forecast_wdf   = fetch_weather_data(forecast_lat, forecast_lon,
+                                                forecast_start, forecast_end,
+                                                forecast=True,
+                                                manual_data=manual_forecast_data)
+            if forecast_wdf is not None and not forecast_wdf.empty:
+                forecast_res = SIMdualKc(
+                    weather_df=forecast_wdf,
+                    crop_df=forecast_crop_df,
+                    soil_df=soil_df,
+                    track_drainage=track_drainage,
+                    enable_yield=False,
+                    return_soil_profile=False,
+                    initial_SW_layers=last_layer_sw
+                )
+                st.session_state.forecast_results = forecast_res
+            else:
+                st.session_state.forecast_results = None
+        
+        st.success("Simulation completed successfully!")
+        
+        # display results with irrigation scheduling side by side
+        col1, col2 = st.columns([2,1])
+        with col1:
+            st.markdown('<div class="sub-header">Daily Simulation Results</div>', unsafe_allow_html=True)
+            st.dataframe(results_df)
+            st.download_button("Download Results (.txt)",
+                               results_df.to_csv(index=False),
+                               file_name="results.txt", mime="text/plain")
             
-            results_df, soil_profile = SIMdualKc(
-                weather_df=weather_df,
-                crop_df=crop_df,
-                soil_df=soil_df,
-                track_drainage=track_drainage,
-                enable_yield=enable_yield,
-                use_fao33=use_fao33,
-                Ym=Ym,
-                Ky=Ky,
-                use_transp=use_transp,
-                WP_yield=WP_yield,
-                enable_leaching=enable_leaching,
-                leaching_method=leaching_method,
-                nitrate_conc=nitrate_conc,
-                total_N_input=total_N_input,
-                leaching_fraction=leaching_fraction,
-                enable_dynamic_root=enable_dynamic_root,
-                initial_root_depth=initial_root_depth,
-                max_root_depth=max_root_depth,
-                days_to_max=days_to_max,
-                return_soil_profile=True
-            )
+            if enable_etaforecast and st.session_state.forecast_results is not None and not st.session_state.forecast_results.empty:
+                st.markdown('<div class="sub-header">5-Day ETa Forecast</div>', unsafe_allow_html=True)
+                frc = st.session_state.forecast_results
+                st.dataframe(frc[["Date","ET0 (mm)","ETa_total (mm)","ETa_transp (mm)","ETa_evap (mm)"]])
             
-            st.session_state.results_df = results_df
-            st.session_state.soil_profile = soil_profile
+            # Graphing
+            st.markdown('<div class="sub-header">Graphs</div>', unsafe_allow_html=True)
+            plot_options = ["ETa Components", "Soil Water in Root Zone", "Drainage", "Cumulative Inputs"]
+            if "Yield (ton/ha)" in results_df.columns:
+                plot_options.append("Yield")
+            if "Leaching (kg/ha)" in results_df.columns:
+                plot_options.append("Leaching")
             
-            # 5) If 5-day forecast is enabled, do next 5 days from today with final soil moisture
-            if enable_etaforecast:
-                final_SW_layers = [layer['SW (mm)'] for layer in soil_profile]
-                # Build a minimal 1-row crop df for next 5 days with the same Kcb as end-season
-                # or we can keep Kcb_end:
-                forecast_crop_df = pd.DataFrame({
-                    "Start_Day":[1],
-                    "End_Day":[5],
-                    "Kcb":[KC_DATABASE[selected_crop]["Kcb_end"]],  # or keep it simpler
-                    "Root_Depth_mm":[600],
-                    "p":[0.5],
-                    "Ke":[0.1]
-                })
-                
-                forecast_start = datetime.now().date()
-                forecast_end   = forecast_start + timedelta(days=4)
-                forecast_weather = fetch_weather_data(forecast_lat, forecast_lon, forecast_start, forecast_end,
-                                                      forecast=True, manual_data=manual_forecast_data)
-                if forecast_weather is not None and not forecast_weather.empty:
-                    forecast_results = SIMdualKc(
-                        forecast_weather, 
-                        forecast_crop_df, 
-                        soil_df, 
-                        track_drainage=track_drainage,
-                        enable_yield=False,  # usually yield not relevant to just 5 day
-                        return_soil_profile=False,
-                        initial_SW_layers=final_SW_layers
-                    )
-                    st.session_state.forecast_results = forecast_results
-                else:
-                    st.session_state.forecast_results = None
-                    st.warning("Forecast data is not available.")
+            choice = st.selectbox("Select a plot", plot_options)
+            if choice=="ETa Components":
+                fig, ax = plt.subplots(figsize=(10,6))
+                ax.plot(results_df["Date"], results_df["ETa_transp (mm)"], label="Transp")
+                ax.plot(results_df["Date"], results_df["ETa_evap (mm)"], label="Evap")
+                ax.plot(results_df["Date"], results_df["ETa_total (mm)"], label="ETa total")
+                ax.legend(); ax.grid(True)
+                ax.set_xlabel("Date"); ax.set_ylabel("mm")
+                st.pyplot(fig)
+            elif choice=="Soil Water in Root Zone":
+                fig, ax = plt.subplots(figsize=(10,6))
+                ax.plot(results_df["Date"], results_df["SW_root (mm)"], label="SW_root")
+                ax.legend(); ax.grid(True)
+                ax.set_xlabel("Date"); ax.set_ylabel("mm")
+                st.pyplot(fig)
+            elif choice=="Drainage":
+                fig, ax = plt.subplots(figsize=(10,6))
+                ax.plot(results_df["Date"], results_df["Daily_Drainage (mm)"], label="Drainage")
+                ax.legend(); ax.grid(True)
+                ax.set_xlabel("Date"); ax.set_ylabel("mm")
+                st.pyplot(fig)
+            elif choice=="Cumulative Inputs":
+                fig, ax = plt.subplots(figsize=(10,6))
+                ax.plot(results_df["Date"], results_df["Cumulative_Irrigation (mm)"], label="Irrigation")
+                ax.plot(results_df["Date"], results_df["Cumulative_Precip (mm)"], label="Precip")
+                ax.legend(); ax.grid(True)
+                ax.set_xlabel("Date"); ax.set_ylabel("mm")
+                st.pyplot(fig)
+            elif choice=="Yield":
+                fig, ax = plt.subplots(figsize=(10,6))
+                ax.plot(results_df["Date"], results_df["Yield (ton/ha)"], label="Yield")
+                ax.legend(); ax.grid(True)
+                ax.set_xlabel("Date"); ax.set_ylabel("ton/ha")
+                st.pyplot(fig)
+            elif choice=="Leaching":
+                fig, ax = plt.subplots(figsize=(10,6))
+                ax.plot(results_df["Date"], results_df["Leaching (kg/ha)"], label="Leaching")
+                ax.legend(); ax.grid(True)
+                ax.set_xlabel("Date"); ax.set_ylabel("kg/ha")
+                st.pyplot(fig)
             
-            st.success("Simulation completed successfully!")
-        else:
-            st.error("Weather data is empty or invalid. Please check your inputs.")
+            # show final soil profile
+            if show_soil_profile and final_soil_profile:
+                st.markdown('<div class="sub-header">Final Soil Profile</div>', unsafe_allow_html=True)
+                pf = pd.DataFrame(final_soil_profile)
+                st.dataframe(pf)
+        
+        with col2:
+            st.markdown("## Irrigation Scheduling Calendar")
+            sched_df = irrigation_schedule(results_df, soil_df)
+            if sched_df.empty:
+                st.write("No irrigation is recommended based on the threshold logic.")
+            else:
+                st.dataframe(sched_df)
+            st.write("""
+            *Note: This is a simple threshold approach (SW_root < 50% TAW) 
+            -> recommended = TAW - SW_root. Adjust logic as needed.*
+            """)
 
-
-with results_tab:
-    if st.session_state.results_df is not None:
-        results_df = st.session_state.results_df
-        forecast_results = st.session_state.forecast_results
-        soil_profile = st.session_state.soil_profile
-        
-        st.markdown('<div class="sub-header">Simulation Results</div>', unsafe_allow_html=True)
-        st.dataframe(results_df)
-        st.download_button("Download Results (.txt)", results_df.to_csv(index=False), 
-                           file_name="results.txt", mime="text/plain")
-        
-        if forecast_results is not None and not forecast_results.empty:
-            st.markdown('<div class="sub-header">5-Day ETa Forecast Results</div>', unsafe_allow_html=True)
-            st.dataframe(forecast_results[["Date","ET0 (mm)","ETa_total (mm)","ETa_transp (mm)","ETa_evap (mm)"]])
-        
-        if soil_profile and len(soil_profile)>0:
-            st.markdown('<div class="sub-header">Final Soil Profile</div>', unsafe_allow_html=True)
-            if "SW (mm)" in soil_profile[0]:
-                profile_df = pd.DataFrame(soil_profile)
-                st.dataframe(profile_df)
-        
-        # Graphing
-        st.markdown('<div class="sub-header">Graphs</div>', unsafe_allow_html=True)
-        plot_options = ["ETa Components", "Soil Water in Root Zone", "Drainage", "Cumulative Metrics"]
-        if "Yield (ton/ha)" in results_df.columns:
-            plot_options.append("Yield")
-        if "Leaching (kg/ha)" in results_df.columns:
-            plot_options.append("Leaching")
-        if "NUE (kg/ha)" in results_df.columns:
-            plot_options.append("NUE")
-        
-        plot_choice = st.selectbox("Choose a plot", plot_options)
-        
-        if plot_choice == "ETa Components":
-            fig, ax = plt.subplots(figsize=(10,6))
-            ax.plot(results_df["Date"], results_df["ETa_transp (mm)"], label="Transpiration")
-            ax.plot(results_df["Date"], results_df["ETa_evap (mm)"], label="Evaporation")
-            ax.plot(results_df["Date"], results_df["ETa_total (mm)"], label="ETa total")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("ET (mm)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        
-        elif plot_choice == "Soil Water in Root Zone":
-            fig, ax = plt.subplots(figsize=(10,6))
-            ax.plot(results_df["Date"], results_df["SW_root (mm)"], label="SW Root Zone")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Soil Water (mm)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        
-        elif plot_choice == "Drainage":
-            fig, ax = plt.subplots(figsize=(10,6))
-            ax.plot(results_df["Date"], results_df["Daily_Drainage (mm)"], label="Drainage")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Drainage (mm)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        
-        elif plot_choice == "Cumulative Metrics":
-            fig, ax = plt.subplots(figsize=(10,6))
-            ax.plot(results_df["Date"], results_df["Cumulative_Irrigation (mm)"], label="Cumulative Irrigation")
-            ax.plot(results_df["Date"], results_df["Cumulative_Precip (mm)"], label="Cumulative Precip")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Cumulative (mm)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        
-        elif plot_choice == "Yield":
-            fig, ax = plt.subplots(figsize=(10,6))
-            ax.plot(results_df["Date"], results_df["Yield (ton/ha)"], label="Yield (ton/ha)")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Yield (ton/ha)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        
-        elif plot_choice == "Leaching":
-            fig, ax = plt.subplots(figsize=(10,6))
-            ax.plot(results_df["Date"], results_df["Leaching (kg/ha)"], label="Leaching")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Leaching (kg/ha)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        
-        elif plot_choice == "NUE":
-            fig, ax = plt.subplots(figsize=(10,6))
-            ax.plot(results_df["Date"], results_df["NUE (kg/ha)"], label="NUE")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("NUE (kg/ha)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
     else:
-        st.info("Please complete the setup and run the simulation to view results.")
+        st.info("Please click 'Run Simulation' on the Setup tab.")
 
 st.markdown('<div class="footer">© 2025 Advanced AgriWaterBalance | Contact: support@agriwaterbalance.com</div>', unsafe_allow_html=True)
