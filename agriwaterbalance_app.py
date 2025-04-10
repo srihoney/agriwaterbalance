@@ -8,7 +8,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import base64
 import io
-
+import math
 
 # --------------------------------------------------------------------------------
 # 1. Large Kc Database
@@ -228,15 +228,79 @@ def compute_Kr(TEW, REW, Ew):
     else:
         return (TEW - Ew) / (TEW - REW)
 
+# ----------------------------
+# New: FAO Penman-Monteith ET0 Calculator
+# ----------------------------
+def eto_penman_monteith(tmax, tmin, tmean, rh_max, rh_min, u2, latitude, elevation, doy):
+    """
+    Compute reference evapotranspiration (ET0) in mm/day using the FAO Penman–Monteith equation.
+    tmax, tmin, tmean: daily maximum, minimum, and mean temperatures (°C)
+    rh_max, rh_min: daily maximum and minimum relative humidity (%)
+    u2: wind speed at 2 m (m/s)
+    latitude: in decimal degrees
+    elevation: elevation (m) – default can be set to 0 if unknown
+    doy: day of year (1-365)
+    """
+    # Constants
+    G_sc = 0.0820  # solar constant [MJ m^-2 min^-1]
+    sigma = 4.903e-9  # Stefan-Boltzmann constant [MJ m^-2 day^-1 K^-4]
+    albedo = 0.23  # albedo for reference crop
+    
+    # Saturation vapor pressures [kPa]
+    e_s_tmax = 0.6108 * math.exp(17.27 * tmax / (tmax + 237.3))
+    e_s_tmin = 0.6108 * math.exp(17.27 * tmin / (tmin + 237.3))
+    e_s = (e_s_tmax + e_s_tmin) / 2.0
+
+    # Actual vapor pressure [kPa]
+    e_a = (e_s_tmin * (rh_max / 100.0) + e_s_tmax * (rh_min / 100.0)) / 2.0
+
+    # Slope of the saturation vapor pressure curve (delta) [kPa/°C]
+    delta = 4098 * (0.6108 * math.exp(17.27 * tmean / (tmean + 237.3))) / ((tmean + 237.3) ** 2)
+
+    # Atmospheric pressure [kPa] from elevation (m)
+    P = 101.3 * (((293 - 0.0065 * elevation) / 293) ** 5.26)
+    gamma = 0.000665 * P  # psychrometric constant [kPa/°C]
+
+    # Extraterrestrial radiation (Ra) [MJ m^-2 day^-1]
+    phi = math.radians(latitude)
+    dr = 1 + 0.033 * math.cos(2 * math.pi / 365 * doy)
+    delta_sun = 0.409 * math.sin(2 * math.pi / 365 * doy - 1.39)
+    omega_s = math.acos(-math.tan(phi) * math.tan(delta_sun))
+    Ra = (24 * 60 / math.pi) * G_sc * dr * (omega_s * math.sin(phi) * math.sin(delta_sun) + math.cos(phi) * math.cos(delta_sun) * math.sin(omega_s))
+
+    # Estimate solar radiation (Rs) using the Hargreaves formula [MJ m^-2 day^-1]
+    k_rs = 0.16  # empirical coefficient; adjust if needed
+    Rs = k_rs * math.sqrt(max(0, tmax - tmin)) * Ra
+
+    # Clear-sky solar radiation (Rso) [MJ m^-2 day^-1]
+    Rso = (0.75 + 2e-5 * elevation) * Ra
+
+    # Net shortwave radiation [MJ m^-2 day^-1]
+    Rns = (1 - albedo) * Rs
+
+    # Convert temperatures to Kelvin for longwave radiation computation
+    tmax_K = tmax + 273.16
+    tmin_K = tmin + 273.16
+
+    # Net longwave radiation [MJ m^-2 day^-1]
+    Rnl = sigma * ((tmax_K ** 4 + tmin_K ** 4) / 2) * (0.34 - 0.14 * math.sqrt(e_a)) * (1.35 * (Rs / Rso) - 0.35)
+
+    # Net radiation (Rn); assume soil heat flux G=0 for daily calculations
+    Rn = Rns - Rnl
+    G = 0
+
+    # Compute ET0 using the FAO Penman–Monteith formula [mm/day]
+    ET0 = (0.408 * delta * (Rn - G) + gamma * (900 / (tmean + 273)) * u2 * (e_s - e_a)) / (delta + gamma * (1 + 0.34 * u2))
+    return ET0
+
+# ----------------------------
+# Modified: 5-Day Forecast Fetch with Penman-Monteith ET0 Calculation
+# ----------------------------
 def fetch_5day_forecast(lat, lon):
     """
-    Specifically fetch the next 5-day forecast from OWM,
-    returning a DataFrame with [Date, Tmax, Tmin, ETo].
-    We'll store it in st.session_state.forecast_5days_df as well.
-    Using your API key: fe2d869569674a4afbfca57707bdf691
+    Fetch the next 5-day forecast from OpenWeatherMap (OWM) and compute daily ET0 using
+    the FAO Penman–Monteith equation. Returns a DataFrame with columns: [Date, Tmax, Tmin, ETo].
     """
-    # We won't combine it with NASA-POWER here; 
-    # just produce the 5-day forecast table for display & water-balance if needed.
     cache_key = f"{lat}_{lon}_5day_forecast"
     if cache_key in st.session_state.weather_cache:
         return st.session_state.weather_cache[cache_key]
@@ -257,7 +321,7 @@ def fetch_5day_forecast(lat, lon):
         
         dd = {}
         now_ = datetime.now().date()
-        cutoff = now_ + timedelta(days=4)  # day0..day4 => 5 days
+        cutoff = now_ + timedelta(days=4)  # Day0 to Day4: 5 days forecast
         for entry in data['list']:
             dt_obj = datetime.fromtimestamp(entry['dt'])  # each 3-hour step
             dt_date = dt_obj.date()
@@ -266,29 +330,45 @@ def fetch_5day_forecast(lat, lon):
             ds = dt_date.strftime("%Y-%m-%d")
             tmax_ = entry['main']['temp_max']
             tmin_ = entry['main']['temp_min']
+            humidity = entry['main']['humidity']
+            wind_speed = entry['wind']['speed'] if 'wind' in entry and 'speed' in entry['wind'] else 0
             if ds not in dd:
-                dd[ds] = {"tmax": tmax_, "tmin": tmin_}
+                dd[ds] = {
+                    "tmax": tmax_,
+                    "tmin": tmin_,
+                    "rh_values": [humidity],
+                    "wind_values": [wind_speed]
+                }
             else:
                 dd[ds]["tmax"] = max(dd[ds]["tmax"], tmax_)
                 dd[ds]["tmin"] = min(dd[ds]["tmin"], tmin_)
+                dd[ds]["rh_values"].append(humidity)
+                dd[ds]["wind_values"].append(wind_speed)
         
         rows = []
         for dsi in sorted(dd.keys()):
             d_ = pd.to_datetime(dsi)
-            tmax_ = dd[dsi]["tmax"]
-            tmin_ = dd[dsi]["tmin"]
-            if tmax_ < tmin_:
-                tmax_, tmin_ = tmin_, tmax_
-            # Simple Hargreaves:
-            Ra = 10.0
-            Tmean = (tmax_ + tmin_)/2
-            eto_ = 0.0023 * Ra * (Tmean + 17.8) * ((tmax_ - tmin_)**0.5)
+            tmax_day = dd[dsi]["tmax"]
+            tmin_day = dd[dsi]["tmin"]
+            Tmean = (tmax_day + tmin_day) / 2.0
+            # Calculate daily maximum and minimum relative humidity:
+            rh_max = max(dd[dsi]["rh_values"])
+            rh_min = min(dd[dsi]["rh_values"])
+            # Average wind speed at 10 m (from forecast), then adjust to 2 m:
+            wind_avg_10 = np.mean(dd[dsi]["wind_values"])
+            u2 = wind_avg_10 * (4.87 / math.log(67.8 * 10 - 5.42))
+            # Day of year:
+            doy = d_.timetuple().tm_yday
+            # Use default elevation (in m). Adjust or parameterize as needed.
+            elevation = 0
+            # Compute ET0 with the FAO Penman–Monteith method
+            eto_val = eto_penman_monteith(tmax_day, tmin_day, Tmean, rh_max, rh_min, u2, lat, elevation, doy)
             
             rows.append({
                 "Date": d_,
-                "Tmax": round(tmax_,2),
-                "Tmin": round(tmin_,2),
-                "ETo": round(eto_,2)
+                "Tmax": round(tmax_day, 2),
+                "Tmin": round(tmin_day, 2),
+                "ETo": round(eto_val, 2)
             })
         
         fdf = pd.DataFrame(rows).sort_values("Date").reset_index(drop=True)
@@ -324,7 +404,7 @@ def fetch_historical_nasa(lat, lon, start_date, end_date):
         for dt_ in dts:
             ds = dt_.strftime("%Y%m%d")
             rad_ = data['properties']['parameter']['ALLSKY_SFC_SW_DWN'].get(ds, 0)
-            eto_v= rad_ * 0.2  # simplified
+            eto_v = rad_ * 0.2  # simplified
             ET0_.append(eto_v)
             prec = data['properties']['parameter']['PRECTOTCORR'].get(ds, 0)
             PP_.append(prec)
@@ -538,7 +618,7 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
                 fraction=(rd_i- tot_depth)/layer_d
             new_SWroot+= SW_layers[j]*fraction
             sum_FC2+= soil_df.iloc[j]['FC']*layer_d*fraction
-            tot_depth= new_d
+            tot_depth=new_d
         Dr_end= sum_FC2- new_SWroot
         
         yield_= None
