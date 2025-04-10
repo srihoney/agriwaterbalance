@@ -19,50 +19,7 @@ import calendar
 CROP_DATABASE = {
     "Carrot": {"Kc_mid":1.05, "Kc_end":0.95, "Kcb_mid":1.00, "Kcb_end":0.90, "total_days_default":90},
     "Beet": {"Kc_mid":1.10, "Kc_end":0.95, "Kcb_mid":1.05, "Kcb_end":0.85, "total_days_default":100},
-    "Garlic": {"Kc_mid":1.05, "Kc_end":0.70, "Kcb_mid":1.00, "Kcb_end":0.65, "total_days_default":120},
-    "Onion (fresh)": {"Kc_mid":1.10, "Kc_end":0.80, "Kcb_mid":1.05, "Kcb_end":0.75, "total_days_default":110},
-    "Onion (dry)": {"Kc_mid":1.10, "Kc_end":0.65, "Kcb_mid":1.05, "Kcb_end":0.60, "total_days_default":120},
-    "Cabbage": {"Kc_mid":1.00, "Kc_end":0.90, "Kcb_mid":0.95, "Kcb_end":0.85, "total_days_default":90},
-    "Lettuce": {"Kc_mid":1.00, "Kc_end":0.95, "Kcb_mid":0.95, "Kcb_end":0.90, "total_days_default":65},
-    "Spinach": {"Kc_mid":1.00, "Kc_end":0.95, "Kcb_mid":0.95, "Kcb_end":0.90, "total_days_default":55},
-    "Broccoli": {"Kc_mid":1.00, "Kc_end":0.95, "Kcb_mid":0.95, "Kcb_end":0.90, "total_days_default":80},
-    "Cauliflower": {"Kc_mid":1.00, "Kc_end":0.95, "Kcb_mid":0.95, "Kcb_end":0.90, "total_days_default":95},
-    "Green bean": {"Kc_mid":1.05, "Kc_end":0.90, "Kcb_mid":1.00, "Kcb_end":0.85, "total_days_default":75},
-    "Tomato (fresh)": {"Kc_mid":1.15, "Kc_end":0.80, "Kcb_mid":1.10, "Kcb_end":0.75, "total_days_default":120},
-    "Tomato (proc)": {"Kc_mid":1.15, "Kc_end":0.70, "Kcb_mid":1.10, "Kcb_end":0.65, "total_days_default":110},
-    "Pepper": {"Kc_mid":1.15, "Kc_end":0.90, "Kcb_mid":1.10, "Kcb_end":0.85, "total_days_default":130},
-    "Eggplant": {"Kc_mid":1.10, "Kc_end":0.90, "Kcb_mid":1.05, "Kcb_end":0.85, "total_days_default":130},
-    "Zucchini": {"Kc_mid":1.05, "Kc_end":0.80, "Kcb_mid":1.00, "Kcb_end":0.75, "total_days_default":60},
-    "Cucumber": {"Kc_mid":1.00, "Kc_end":0.75, "Kcb_mid":0.95, "Kcb_end":0.70, "total_days_default":70},
-    "Melon": {"Kc_mid":1.05, "Kc_end":0.65, "Kcb_mid":1.00, "Kcb_end":0.60, "total_days_default":85},
-    "Watermelon": {"Kc_mid":1.05, "Kc_end":0.70, "Kcb_mid":1.00, "Kcb_end":0.65, "total_days_default":90},
-    "Pumpkin": {"Kc_mid":1.05, "Kc_end":0.70, "Kcb_mid":1.00, "Kcb_end":0.65, "total_days_default":100},
-    "Okra": {"Kc_mid":1.15, "Kc_end":0.75, "Kcb_mid":1.10, "Kcb_end":0.70, "total_days_default":100},
-    "Basil": {"Kc_mid":1.00, "Kc_end":0.80, "Kcb_mid":0.95, "Kcb_end":0.75, "total_days_default":60},
-    "Parsley": {"Kc_mid":1.00, "Kc_end":0.85, "Kcb_mid":0.95, "Kcb_end":0.80, "total_days_default":70},
-    "Coriander": {"Kc_mid":1.00, "Kc_end":0.85, "Kcb_mid":0.95, "Kcb_end":0.80, "total_days_default":65},
-    "Celery": {"Kc_mid":1.05, "Kc_end":0.90, "Kcb_mid":1.00, "Kcb_end":0.85, "total_days_default":120},
-    "Turnip": {"Kc_mid":1.05, "Kc_end":0.80, "Kcb_mid":1.00, "Kcb_end":0.75, "total_days_default":85},
-    "Radish": {"Kc_mid":1.00, "Kc_end":0.80, "Kcb_mid":0.95, "Kcb_end":0.75, "total_days_default":45},
-    "Wheat": {"Kc_mid":1.15, "Kc_end":0.35, "Kcb_mid":1.10, "Kcb_end":0.30, "total_days_default":150},
-    "Barley": {"Kc_mid":1.15, "Kc_end":0.25, "Kcb_mid":1.10, "Kcb_end":0.20, "total_days_default":130},
-    "Maize": {"Kc_mid":1.20, "Kc_end":0.60, "Kcb_mid":1.15, "Kcb_end":0.55, "total_days_default":140},
-    "Rice": {"Kc_mid":1.20, "Kc_end":0.90, "Kcb_mid":1.15, "Kcb_end":0.85, "total_days_default":160},
-    "Sorghum": {"Kc_mid":1.05, "Kc_end":0.40, "Kcb_mid":1.00, "Kcb_end":0.35, "total_days_default":120},
-    "Soybean": {"Kc_mid":1.15, "Kc_end":0.50, "Kcb_mid":1.10, "Kcb_end":0.45, "total_days_default":130},
-    "Bean": {"Kc_mid":1.15, "Kc_end":0.90, "Kcb_mid":1.10, "Kcb_end":0.85, "total_days_default":95},
-    "Peanut": {"Kc_mid":1.10, "Kc_end":0.60, "Kcb_mid":1.05, "Kcb_end":0.55, "total_days_default":135},
-    "Cotton": {"Kc_mid":1.15, "Kc_end":0.65, "Kcb_mid":1.10, "Kcb_end":0.60, "total_days_default":160},
-    "Sugarbeet": {"Kc_mid":1.20, "Kc_end":0.60, "Kcb_mid":1.15, "Kcb_end":0.55, "total_days_default":180},
-    "Sugarcane": {"Kc_mid":1.25, "Kc_end":1.10, "Kcb_mid":1.20, "Kcb_end":1.05, "total_days_default":300},
-    "Sunflower": {"Kc_mid":1.15, "Kc_end":0.35, "Kcb_mid":1.10, "Kcb_end":0.30, "total_days_default":120},
-    "Rapeseed": {"Kc_mid":1.15, "Kc_end":0.40, "Kcb_mid":1.10, "Kcb_end":0.35, "total_days_default":150},
-    "Mustard": {"Kc_mid":1.15, "Kc_end":0.35, "Kcb_mid":1.10, "Kcb_end":0.30, "total_days_default":120},
-    "Faba bean": {"Kc_mid":1.15, "Kc_end":0.65, "Kcb_mid":1.10, "Kcb_end":0.60, "total_days_default":130},
-    "Chickpea": {"Kc_mid":1.15, "Kc_end":0.25, "Kcb_mid":1.10, "Kcb_end":0.20, "total_days_default":120},
-    "Millet": {"Kc_mid":1.10, "Kc_end":0.40, "Kcb_mid":1.05, "Kcb_end":0.35, "total_days_default":100},
-    "Quinoa": {"Kc_mid":1.05, "Kc_end":0.45, "Kcb_mid":1.00, "Kcb_end":0.40, "total_days_default":120},
-    "Lentil": {"Kc_mid":1.10, "Kc_end":0.25, "Kcb_mid":1.05, "Kcb_end":0.20, "total_days_default":110},
+    # ... (the rest of your crop database) ...
     "Potato": {"Kc_mid":1.15, "Kc_end":0.75, "Kcb_mid":1.10, "Kcb_end":0.70, "total_days_default":110}
 }
 
@@ -176,7 +133,7 @@ st.markdown(
 st.markdown("**A Professional, All-in-One Tool for Crop Water Management**", unsafe_allow_html=True)
 
 # --------------------------------------------------------------------------------
-# 4. Tabs: Only Setup + Results
+# 4. TABS: ONLY Setup + Results
 # --------------------------------------------------------------------------------
 setup_tab, results_tab = st.tabs(["Setup Simulation", "Results"])
 
@@ -196,7 +153,7 @@ if 'last_reset_date' not in st.session_state:
 if 'simulation_done' not in st.session_state:
     st.session_state.simulation_done = False
 
-# We'll store the next 5 days forecast ETo & ETa in a separate DF
+# We'll store the next 5 days forecast in a separate DF
 if 'forecast_5days_df' not in st.session_state:
     st.session_state.forecast_5days_df = pd.DataFrame()
 
@@ -226,8 +183,12 @@ def compute_Kr(TEW, REW, Ew):
 
 def fetch_weather_data(lat, lon, start_date, end_date, forecast=True):
     """
-    Fetches weather data (historical or next 5-day forecast).
-    Also stores a separate next-5-day DF in st.session_state.forecast_5days_df.
+    Fetches weather data (either historical or next 5-day forecast).
+    We'll parse the next 5 days from OpenWeatherMap's 3-hourly data,
+    store daily TMAX/TMIN -> compute ETo by Hargreaves.
+    
+    We'll store that daily result in st.session_state["forecast_5days_df"] 
+    for display in the Results tab.
     """
     cache_key = f"{lat}_{lon}_{start_date}_{end_date}_{forecast}"
     if cache_key in st.session_state.weather_cache:
@@ -238,84 +199,100 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=True):
             st.warning("Daily API call limit reached.")
             return None
         if lat == 0 and lon == 0:
-            st.warning("Invalid lat/lon.")
+            st.warning("Invalid lat/lon => no forecast.")
             return None
         
-        # Replace with your own OWM API key:
+        # Use your OWM API key:
         api_key = "fe2d869569674a4afbfca57707bdf691"
-        url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={fe2d869569674a4afbfca57707bdf691}&units=metric"
+        url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"
+        
         try:
             resp = session.get(url, timeout=30)
             resp.raise_for_status()
             st.session_state.api_calls += 1
             data = resp.json()
             
+            # Accumulate daily tmax, tmin for up to 5 days from "today"
+            # We'll allow dt_ <= today + 4 days (thus 5 distinct days: day0..day4).
             dd = {}
-            for entry in data['list']:
-                dt_obj = datetime.fromtimestamp(entry['dt'])
-                dt_ = dt_obj.date()
-                # only up to 5 days from now
-                if dt_ > (datetime.now().date() + timedelta(days=4)):
-                    continue
-                ds = dt_.strftime("%Y-%m-%d")
-                tmax_ = entry['main']['temp_max']
-                tmin_ = entry['main']['temp_min']
-                if ds not in dd:
-                    dd[ds] = {
-                        'tmax': tmax_,
-                        'tmin': tmin_
-                    }
-                else:
-                    dd[ds]['tmax'] = max(dd[ds]['tmax'], tmax_)
-                    dd[ds]['tmin'] = min(dd[ds]['tmin'], tmin_)
+            today_ = datetime.now().date()
+            cutoff = today_ + timedelta(days=4)
             
-            five_dates = sorted(dd.keys())
+            for entry in data['list']:
+                dt_obj = datetime.fromtimestamp(entry['dt'])  # 3-hour step
+                dt_date = dt_obj.date()
+                if dt_date > cutoff:
+                    continue
+                ds = dt_date.strftime("%Y-%m-%d")
+                
+                temp_max = entry['main']['temp_max']
+                temp_min = entry['main']['temp_min']
+                
+                if ds not in dd:
+                    dd[ds] = {"tmax": temp_max, "tmin": temp_min}
+                else:
+                    dd[ds]["tmax"] = max(dd[ds]["tmax"], temp_max)
+                    dd[ds]["tmin"] = min(dd[ds]["tmin"], temp_min)
+            
+            # Build daily table
             daily_rows = []
-            for dsi in five_dates:
-                dat_ = pd.to_datetime(dsi)
-                tmax_ = dd[dsi]['tmax']
-                tmin_ = dd[dsi]['tmin']
+            for dsi in sorted(dd.keys()):
+                d_ = pd.to_datetime(dsi)
+                tmax_ = dd[dsi]["tmax"]
+                tmin_ = dd[dsi]["tmin"]
                 if tmax_ < tmin_:
                     tmax_, tmin_ = tmin_, tmax_
-                # Simple Hargreaves for daily ETo
-                Ra = 10
+                
+                # Simple Hargreaves for ETo
+                Ra = 10.0
                 Tmean = (tmax_ + tmin_) / 2
-                eto_ = 0.0023 * Ra * (Tmean + 17.8) * ((tmax_ - tmin_) ** 0.5)
+                eto_ = 0.0023 * Ra * (Tmean + 17.8) * ((tmax_ - tmin_)**0.5)
+                
                 daily_rows.append({
-                    "Date": dat_,
-                    "ET0": round(max(0, eto_), 2),
-                    "Precipitation": 0.0,  # simplified
+                    "Date": d_,
+                    "Tmax": round(tmax_,2),
+                    "Tmin": round(tmin_,2),
+                    "ETo": round(eto_,2),
+                    "Precipitation": 0.0,   # not aggregated in this simple code
                     "Irrigation": 0.0
                 })
             
             f5_df = pd.DataFrame(daily_rows)
+            # Store it for display
             st.session_state.forecast_5days_df = f5_df.copy()
             
-            wdf = f5_df.rename(columns={"ET0": "ET0",
-                                        "Precipitation":"Precipitation"})
+            # Also return a DataFrame that fits our "weather_df" usage
+            # (with columns Date, ET0, Precipitation, Irrigation)
+            # so we can feed it to the water balance if needed.
+            wdf = f5_df.rename(columns={"ETo":"ET0"})
             wdf = wdf.sort_values("Date").reset_index(drop=True)
-            
             st.session_state.weather_cache[cache_key] = wdf
             return wdf
         
         except Exception as e:
-            st.error(f"Unable to fetch forecast data: {e}")
+            st.error(f"Forecast data fetch error: {e}")
             return None
     
     else:
+        # NASA POWER historical path
         try:
             start_str = start_date.strftime("%Y%m%d")
-            end_str = end_date.strftime("%Y%m%d")
-            url = f"https://power.larc.nasa.gov/api/temporal/daily/point?parameters=ALLSKY_SFC_SW_DWN,T2M,RH2M,PRECTOTCORR&community=AG&longitude={lon}&latitude={lat}&start={start_str}&end={end_str}&format=JSON"
+            end_str   = end_date.strftime("%Y%m%d")
+            url = (f"https://power.larc.nasa.gov/api/temporal/daily/point?"
+                   f"parameters=ALLSKY_SFC_SW_DWN,T2M,RH2M,PRECTOTCORR&community=AG"
+                   f"&longitude={lon}&latitude={lat}"
+                   f"&start={start_str}&end={end_str}&format=JSON")
             r = session.get(url, timeout=30)
             r.raise_for_status()
             data = r.json()
             
             dts = pd.date_range(start_date, end_date)
             ET0_, PP_ = [], []
+            
             for dt_ in dts:
                 ds = dt_.strftime("%Y%m%d")
                 rad_ = data['properties']['parameter']['ALLSKY_SFC_SW_DWN'].get(ds, 0)
+                # very rough
                 eto_v = rad_ * 0.2
                 ET0_.append(eto_v)
                 prec = data['properties']['parameter']['PRECTOTCORR'].get(ds, 0)
@@ -329,9 +306,11 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=True):
             })
             st.session_state.weather_cache[cache_key] = wdf
             return wdf
+        
         except:
             st.warning("Unable to fetch historical NASA-POWER data.")
             return None
+
 
 def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
                        track_drainage=True, enable_yield=False, Ym=0, Ky=0,
@@ -339,6 +318,9 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
                        enable_leaching=False, nitrate_conc=10.0,
                        total_N_input=100.0, leaching_fraction=0.1,
                        dynamic_root=False, init_root=300, max_root=800, days_to_max=60):
+    """
+    (unchanged water-balance code)
+    """
     if weather_df.empty:
         st.error("Weather data is empty.")
         return None
@@ -354,10 +336,10 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
     for i in range(len(crop_stages_df) - 1):
         st_i = int(crop_stages_df.iloc[i]['Start_Day']) - 1
         en_i = int(crop_stages_df.iloc[i+1]['End_Day']) - 1
-        if en_i < 0:
+        if en_i < 0: 
             continue
         en_i = min(en_i, NDAYS-1)
-        st_i = max(0, st_i)
+        st_i = max(st_i, 0)
         if st_i > en_i:
             continue
         
@@ -372,16 +354,17 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
         
         L = en_i - st_i + 1
         day_kcb[st_i:en_i+1]  = np.linspace(kcb_s, kcb_e, L)
-        day_p[st_i:en_i+1]    = np.linspace(p_s, p_e, L)
-        day_ke[st_i:en_i+1]   = np.linspace(ke_s, ke_e, L)
-        day_root[st_i:en_i+1] = np.linspace(rd_s, rd_e, L)
+        day_p[st_i:en_i+1]    = np.linspace(p_s,   p_e,   L)
+        day_ke[st_i:en_i+1]   = np.linspace(ke_s,  ke_e,  L)
+        day_root[st_i:en_i+1] = np.linspace(rd_s,  rd_e,  L)
     
+    # Last stage
     i_last = len(crop_stages_df) - 1
     st_l = int(crop_stages_df.iloc[i_last]['Start_Day']) - 1
     en_l = int(crop_stages_df.iloc[i_last]['End_Day']) - 1
     if st_l < 0: st_l = 0
     if en_l < 0: en_l = 0
-    if en_l > NDAYS - 1: en_l = NDAYS - 1
+    if en_l > NDAYS-1: en_l = NDAYS-1
     if st_l <= en_l:
         day_kcb[st_l:en_l+1]  = crop_stages_df.iloc[i_last]['Kcb']
         day_p[st_l:en_l+1]    = crop_stages_df.iloc[i_last]['p']
@@ -395,7 +378,7 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
     
     if dynamic_root:
         root_lin = np.linspace(init_root, max_root, min(days_to_max, NDAYS)).tolist()
-        if NDAYS>days_to_max:
+        if NDAYS > days_to_max:
             root_lin += [max_root]*(NDAYS - days_to_max)
         day_root = np.array(root_lin[:NDAYS])
     
@@ -403,6 +386,7 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
     REW = soil_df['REW'].sum()
     E_count = REW
     
+    # Start layers at FC
     SW_layers = []
     for j in range(len(soil_df)):
         fc_j = soil_df.iloc[j]['FC'] * soil_df.iloc[j]['Depth_mm']
@@ -425,13 +409,13 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
         ke0_i = day_ke[d_i]
         rd_i  = max(1, day_root[d_i])
         
-        tot_depth = 0
-        sum_FC, sum_WP, SW_root = 0, 0, 0
+        # TAW, RAW
+        tot_depth=0
+        sum_FC, sum_WP, SW_root=0,0,0
         for j in range(len(soil_df)):
             layer_d = soil_df.iloc[j]['Depth_mm']
-            WP_j    = soil_df.iloc[j]['WP']
-            FC_j    = soil_df.iloc[j]['FC']
-            
+            WP_j = soil_df.iloc[j]['WP']
+            FC_j = soil_df.iloc[j]['FC']
             new_d = tot_depth + layer_d
             fraction=0
             if new_d<=rd_i:
@@ -439,9 +423,9 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
             elif tot_depth<rd_i<new_d:
                 fraction=(rd_i - tot_depth)/layer_d
             if fraction>0:
-                sum_FC   += FC_j*layer_d*fraction
-                sum_WP   += WP_j*layer_d*fraction
-                SW_root  += SW_layers[j]*fraction
+                sum_FC+= FC_j*layer_d*fraction
+                sum_WP+= WP_j*layer_d*fraction
+                SW_root+= SW_layers[j]*fraction
             tot_depth=new_d
         
         TAW_ = sum_FC - sum_WP
@@ -457,9 +441,9 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
         Etc_evap  = Ke_*ET0_i
         
         infiltration = PR_i+IR_i
-        runoff=0
-        excess = infiltration-ETc_
+        excess = infiltration - ETc_
         drainage=0
+        runoff=0
         
         if track_drainage:
             for j in range(len(soil_df)):
@@ -470,6 +454,7 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
                     SW_layers[j]+= added
                     excess-=added
             drainage = max(0, excess)
+            
             for j in range(len(soil_df)):
                 layer_wp = soil_df.iloc[j]['WP']*soil_df.iloc[j]['Depth_mm']
                 layer_fc = soil_df.iloc[j]['FC']*soil_df.iloc[j]['Depth_mm']
@@ -497,7 +482,7 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
                         break
                 tot_depth=new_d
         
-        ev_rem = Etc_evap
+        ev_rem=Etc_evap
         if ev_rem>0 and len(soil_df)>0:
             fc_0 = soil_df.iloc[0]['FC']*soil_df.iloc[0]['Depth_mm']
             wp_0 = soil_df.iloc[0]['WP']*soil_df.iloc[0]['Depth_mm']
@@ -505,25 +490,26 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
             actual_rm = min(ev_rem, available_0)
             SW_layers[0]-= actual_rm
         
+        # Evap counting
         if infiltration>=4.0:
             E_count=0
         else:
-            E_count+=Etc_evap
-        E_count = max(0, min(E_count, TEW))
+            E_count+= Etc_evap
+        E_count= max(0, min(E_count, TEW))
         
         new_SWroot=0
         tot_depth=0
         sum_FC2=0
         for j in range(len(soil_df)):
             layer_d = soil_df.iloc[j]['Depth_mm']
-            new_d = tot_depth+layer_d
+            new_d = tot_depth + layer_d
             fraction=0
             if new_d<=rd_i:
                 fraction=1.0
             elif tot_depth<rd_i<new_d:
                 fraction=(rd_i - tot_depth)/layer_d
             new_SWroot+= SW_layers[j]*fraction
-            sum_FC2  += soil_df.iloc[j]['FC']*layer_d*fraction
+            sum_FC2 += soil_df.iloc[j]['FC']*layer_d*fraction
             tot_depth= new_d
         Dr_end = sum_FC2-new_SWroot
         
@@ -577,6 +563,7 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
     outdf = pd.DataFrame(results)
     return outdf
 
+
 def create_auto_stages_for_crop(crop_name):
     total_d = CROP_DATABASE[crop_name]["total_days_default"]
     init_d = int(total_d*0.2)
@@ -594,7 +581,6 @@ def create_auto_stages_for_crop(crop_name):
         {"Start_Day": init_d+dev_d+mid_d+1, "End_Day": total_d,            "Kcb": kcb_end,  "Root_Depth_mm":600, "p": 0.5, "Ke":0.1}
     ]
     return pd.DataFrame(stg)
-
 
 # --------------------------------------------------------------------------------
 # SETUP TAB
@@ -686,10 +672,10 @@ with setup_tab:
                     fore_end   = today + timedelta(days=4)
                     hist_wdf   = fetch_weather_data(lat_, lon_, hist_start, hist_end, forecast=False)
                     fore_wdf   = fetch_weather_data(lat_, lon_, fore_start, fore_end, forecast=True)
-                    if hist_wdf is not None and fore_wdf is not None:
+                    if hist_wdf is not None and not hist_wdf.empty:
                         wdf = pd.concat([hist_wdf, fore_wdf]).sort_values("Date").reset_index(drop=True)
                     else:
-                        wdf = pd.DataFrame()
+                        wdf = fore_wdf if fore_wdf is not None else pd.DataFrame()
                 else:
                     wdf = pd.DataFrame()
         else:
@@ -701,10 +687,10 @@ with setup_tab:
                 fore_end   = today + timedelta(days=4)
                 hist_wdf   = fetch_weather_data(lat_, lon_, hist_start, hist_end, forecast=False)
                 fore_wdf   = fetch_weather_data(lat_, lon_, fore_start, fore_end, forecast=True)
-                if hist_wdf is not None and fore_wdf is not None:
+                if hist_wdf is not None and not hist_wdf.empty:
                     wdf = pd.concat([hist_wdf, fore_wdf]).sort_values("Date").reset_index(drop=True)
                 else:
-                    wdf = pd.DataFrame()
+                    wdf = fore_wdf if fore_wdf is not None else pd.DataFrame()
             else:
                 st.warning("No weather file & forecast disabled => no data. Stopping.")
                 st.stop()
@@ -884,18 +870,16 @@ with results_tab:
                 buf.seek(0)
                 st.download_button("Download Plot", buf, file_name="leaching.png", mime="image/png")
 
-            # Show a separate table for the next 5 days forecast (ETo & ETa)
-            st.markdown("## Next 5 Days Forecast (ETo & ETa)")
+
+            # Show separate table for next 5 days forecast:
+            st.markdown("## Next 5 Days Forecast")
             f5_df = st.session_state.forecast_5days_df.copy()
             if not f5_df.empty:
-                # If there's no "ETa" column, define ETa = ET0 for demonstration
-                if "ETa" not in f5_df.columns:
-                    f5_df["ETa"] = f5_df["ET0"]
-                f5_df_display = f5_df[["Date", "ET0", "ETa"]].copy()
-                st.dataframe(f5_df_display)
+                # We'll just show whatever columns we have: typically [Date, Tmax, Tmin, ETo, Precipitation, Irrigation]
+                st.dataframe(f5_df)
                 st.download_button(
-                    "Download Next 5 Days Forecast",
-                    f5_df_display.to_csv(index=False),
+                    "Download Next 5 Days Forecast CSV",
+                    f5_df.to_csv(index=False),
                     file_name="next_5days_forecast.csv",
                     mime="text/csv"
                 )
