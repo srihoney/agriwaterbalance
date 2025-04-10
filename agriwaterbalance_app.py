@@ -85,7 +85,7 @@ session.mount('https://', HTTPAdapter(max_retries=retries))
 # --------------------------------------------------------------------------------
 # 3. Streamlit Page Configuration & (Optional) Logo
 # --------------------------------------------------------------------------------
-st.set_page_config(page_title="Advanced AgriWaterBalance", layout="wide")
+st.set_page_config(page_title="AgriWaterBalance", layout="wide")
 
 try:
     with open("logo.png", "rb") as image_file:
@@ -182,7 +182,7 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-st.markdown("**A Professional, All-in-One Tool for Crop Water Management**", unsafe_allow_html=True)
+st.markdown("**A Tool for Crop Water Management**", unsafe_allow_html=True)
 
 # --------------------------------------------------------------------------------
 # 4. TABS: Only "Setup Simulation" & "Results" - NO Irrigation Calendar
