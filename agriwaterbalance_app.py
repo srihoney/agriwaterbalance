@@ -177,7 +177,7 @@ st.markdown(
         <div class="header-logo">
             <img src="{logo_url}" alt="Logo">
         </div>
-        <div class="header-title">Advanced AgriWaterBalance</div>
+        <div class="header-title">AgriWaterBalance</div>
     </div>
     """,
     unsafe_allow_html=True
