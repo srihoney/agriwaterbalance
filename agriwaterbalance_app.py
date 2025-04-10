@@ -85,9 +85,9 @@ try:
 except FileNotFoundError:
     logo_url = ""
 
-# Embed Animated GIFs as Base64 (replace with actual GIF URLs or local files)
-water_drop_gif = "https://media.giphy.com/media/xT9IgzoW1tukU3K5nW/giphy.gif"  # Example URL
-sun_gif = "https://media.giphy.com/media/3o7TKz9b5hI6ZfW8Y0/giphy.gif"      # Example URL
+# Embed Animated GIFs as Base64
+water_drop_gif = "https://media.giphy.com/media/xT9IgzoW1tukU3K5nW/giphy.gif"
+sun_gif = "https://media.giphy.com/media/3o7TKz9b5hI6ZfW8Y0/giphy.gif"
 
 def get_base64_from_url(url):
     try:
@@ -164,6 +164,8 @@ if 'api_calls' not in st.session_state:
     st.session_state.api_calls = 0
 if 'last_reset_date' not in st.session_state:
     st.session_state.last_reset_date = datetime.now().date()
+if 'simulation_done' not in st.session_state:
+    st.session_state.simulation_done = False
 
 current_date = datetime.now().date()
 if st.session_state.last_reset_date != current_date:
@@ -617,7 +619,7 @@ with setup_tab:
     selected_crop = st.selectbox("Choose your crop", crop_list)
     st.write(f"**Selected Crop**: {selected_crop}")
     st.write(f" - Kc_mid={CROP_DATABASE[selected_crop]['Kc_mid']}, Kc_end={CROP_DATABASE[selected_crop]['Kc_end']}")
-    st.write(f" - Kcb_mid={CROP_DATABASE[selected_crop]['Kcb_mid']}, Kcb_end={CROP_DATABASE[selected_crop]['Kcb_end']}")
+    st.write(f" - Kcb_mid Yamanaka et al.={CROP_DATABASE[selected_crop]['Kcb_mid']}, Kcb_end={CROP_DATABASE[selected_crop]['Kcb_end']}")
     
     st.markdown('<p style="font-size:16px;">2. Weather Data</p>', unsafe_allow_html=True)
     weather_file = st.file_uploader("Upload CSV with Date,ET0,Precipitation,Irrigation, or rely on forecast", type=["csv", "txt"])
@@ -905,7 +907,7 @@ with irrig_calendar_tab:
             st.markdown(calendar_html, unsafe_allow_html=True)
             
             st.markdown("### 5-Day Forecast Table")
-            today = datetime.now().date()
+            today = datetime.now()
             forecast_days = st.session_state.results_df[(st.session_state.results_df["Date"] > today) & 
                                                         (st.session_state.results_df["Date"] <= today + timedelta(days=4))]
             if not forecast_days.empty:
