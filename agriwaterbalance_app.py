@@ -675,7 +675,7 @@ with setup_tab:
     crop_list = list(CROP_DATABASE.keys())
     selected_crop = st.selectbox("Choose your crop", crop_list)
     st.write(f"**Selected Crop**: {selected_crop}")
-    st.write(f"- Kc_mid={CROP_DATABASE[selected_crop]['Kc_mid']}, Kc_end={CROP_DATABASE[selected_crop]['Kc_end']}")
+    st.write(f"- Kc_ini={CROP_DATABASE[selected_crop]['Kc_ini']}, Kc_mid={CROP_DATABASE[selected_crop]['Kc_mid']}, Kc_end={CROP_DATABASE[selected_crop]['Kc_end']}")
     st.write(f"- Kcb_mid={CROP_DATABASE[selected_crop]['Kcb_mid']}, Kcb_end={CROP_DATABASE[selected_crop]['Kcb_end']}")
 
     st.markdown('<p style="font-size:16px;">2. Weather Data</p>', unsafe_allow_html=True)
