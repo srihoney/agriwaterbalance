@@ -566,8 +566,8 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
             
             for j in range(len(soil_df)):
                 layer_wp = soil_df.iloc[j]['WP']*soil_df.iloc[j]['Depth_mm']
-                sw_percent = (SW_layers[j] / fc_layer) * 100 if fc_layer > 0 else None
-                day_out[f"Layer{j}_SW (%)"] = round(sw_percent, 2) if sw_percent is not None else None
+                layer_fc = soil_df.iloc[j]['FC']*soil_df.iloc[j]['Depth_mm']
+                SW_layers[j] = max(layer_wp, min(layer_fc, SW_layers[j]))
         
         tr_rem= Etc_trans
         if tr_rem>0:
@@ -664,7 +664,9 @@ def simulate_SIMdualKc(weather_df, crop_stages_df, soil_df,
             day_out["Leaching (kg/ha)"] = leaching_
         
         for j in range(len(soil_df)):
-            day_out[f"Layer{j}_SW (mm)"] = SW_layers[j]
+            fc_layer = soil_df.iloc[j]["FC"] * soil_df.iloc[j]["Depth_mm"]
+            sw_percent = (SW_layers[j] / fc_layer) * 100 if fc_layer > 0 else None
+            day_out[f"Layer{j}_SW (%)"] = round(sw_percent, 2) if sw_percent is not None else None
         
         results.append(day_out)
     
