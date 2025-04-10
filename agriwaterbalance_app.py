@@ -41,7 +41,7 @@ CROP_DATABASE = {
     "Basil": {"Kc_mid":1.00, "Kc_end":0.80, "Kcb_mid":0.95, "Kcb_end":0.75, "total_days_default":60},
     "Parsley": {"Kc_mid":1.00, "Kc_end":0.85, "Kcb_mid":0.95, "Kcb_end":0.80, "total_days_default":70},
     "Coriander": {"Kc_mid":1.00, "Kc_end":0.85, "Kcb_mid":0.95, "Kcb_end":0.80, "total_days_default":65},
-    "Celery": {"Kc_mid":1.05, "Kc_end":0.90, "Kcb_mid":1.00, "Kcb_end":0. louder85, "total_days_default":120},
+    "Celery": {"Kc_mid":1.05, "Kc_end":0.90, "Kcb_mid":1.00, "Kcb_end":0.85, "total_days_default":120},
     "Turnip": {"Kc_mid":1.05, "Kc_end":0.80, "Kcb_mid":1.00, "Kcb_end":0.75, "total_days_default":85},
     "Radish": {"Kc_mid":1.00, "Kc_end":0.80, "Kcb_mid":0.95, "Kcb_end":0.75, "total_days_default":45},
     "Wheat": {"Kc_mid":1.15, "Kc_end":0.35, "Kcb_mid":1.10, "Kcb_end":0.30, "total_days_default":150},
