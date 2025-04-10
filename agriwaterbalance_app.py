@@ -248,8 +248,8 @@ def fetch_weather_data(lat, lon, start_date, end_date, forecast=True):
             return None
         
         # Replace with your own OWM API key:
-        api_key = "YOUR_OPENWEATHER_API_KEY_HERE"
-        url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"
+        api_key = "fe2d869569674a4afbfca57707bdf691"
+        url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={fe2d869569674a4afbfca57707bdf691}&units=metric"
         try:
             resp = session.get(url, timeout=30)
             resp.raise_for_status()
